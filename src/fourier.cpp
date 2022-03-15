@@ -32,7 +32,99 @@ void computeVectorMagnitude(const std::vector<std::complex<float>> &Xf, std::vec
 }
 
 // add your own code to estimate the PSD
+void estimatePSD(const std::vector<float> &samples, float &Fs, std::vector<float> &freq, std::vector<float> &psd_est)
+{
 
+	std::cout << "estPSD Start\n";
+
+	float df = Fs/NFFT;
+
+	freq.resize(NFFT/2);
+
+	// std::cout << df << " " << freq.size() << "\n";
+
+	//exit(1);
+
+	for (unsigned int i = 0; i < freq.size(); i++){
+		freq[i] = i * df;
+	}
+
+	std::vector<float> hann;
+
+	hann.resize(NFFT);
+
+	for(unsigned int i = 0; i < hann.size(); i++){
+		hann[i] = pow(sin(i * PI / NFFT),2);
+	}
+
+	unsigned int no_segments =  floor(samples.size() / NFFT);
+
+	std::vector<float> psd_list;
+	psd_list.resize(no_segments * NFFT / 2);
+
+	for(unsigned int k = 0; k < no_segments; k++){
+
+		//std::vector<float>::const_iterator first =  samples.begin() + (k * NFFT);
+		//std::vector<float>::const_iterator last =  samples.begin() + ((k + 1) * NFFT);
+		//std::vector<float> subvec(first, last);
+
+		std::vector<float>::const_iterator start = samples.begin() + (k * NFFT);
+		std::vector<float>::const_iterator end = samples.begin() + ((k+1) * NFFT);
+
+		std::vector<float> subvec(NFFT);
+
+		copy(start, end, subvec.begin());
+
+		std::vector<float> windowed_samples;
+		windowed_samples.resize(NFFT);
+
+		// Pointwise multiplication of hann and sample window
+		for(unsigned int j = 0; j < subvec.size(); j++){
+			windowed_samples[j] = subvec[j] * hann[j];
+		}
+
+		std::vector<std::complex<float>> Xf;
+		DFT(windowed_samples, Xf);
+
+		Xf.resize(NFFT/2);
+		std::vector<float> psd_seg;
+		psd_seg.resize(Xf.size());
+
+		for(unsigned int j = 0; j < psd_seg.size(); j++){
+			//std::cout << Xf[j];
+			psd_seg[j] = 10 * log10(2 * (1/(Fs * NFFT / 2)) * pow(std::abs(Xf[j]),2));
+			//std::cout << " " << psd_seg[j] << "\n";
+		}
+
+		for(unsigned int j = 0; j < psd_seg.size(); j++){
+			psd_list[(k * psd_seg.size()) + j] = psd_seg[j];
+			//std::cout << psd_list.back() << "\n";
+		}
+
+		//psd_list.insert(psd_list.end(), psd_seg.begin(), psd_seg.end());
+
+	}
+
+	psd_est.resize(NFFT/2);
+
+	for(unsigned int k = 0; k < (NFFT/2); k++){
+
+		for(unsigned int l = 0; l < no_segments; l++){
+			//std::cout << psd_list[k + (l * NFFT / 2)] << "\n";
+			psd_est[k] = psd_est[k] + psd_list[k + (l * NFFT / 2)];
+		}
+
+		//std::cout << psd_est[k];
+
+		psd_est[k] = psd_est[k] / no_segments;
+
+		//std::cout << " " << psd_est[k] << "\n";
+
+	}
+
+	std::cout << "estPSD end\n";
+
+}
 //////////////////////////////////////////////////////
 
 // added IDFT

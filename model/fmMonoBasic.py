@@ -84,6 +84,25 @@ audio_Fs = 48e3
 # in-lab (il_vs_th = 0) vs takehome (il_vs_th = 1)
 il_vs_th = 0
 
+def impulseResponse(Fs,Fc,N_taps):
+	coeffs = [0]*N_taps
+	normCutoffFreq = Fc/(Fs/2)
+	for i in range(N_taps):
+		if i == (N_taps-1)/2:
+			coeffs[i] = normCutoffFreq
+		else:
+			coeffs[i] = normCutoffFreq*(math.sin(math.pi*normCutoffFreq*(i-(N_taps-1)/2)))/(math.pi*normCutoffFreq*(i-(N_taps-1)/2))
+		coeffs[i] = coeffs[i]*(math.sin(i*math.pi/N_taps))*(math.sin(i*math.pi/N_taps))
+	return coeffs
+
+def convolve(h, x, axis = -1, zi = False):
+	y = np.zeros(len(x))
+	for n in range(len(y)):
+		for k in range(len(h)):
+			if n-k >= 0 and n-k < len(x):
+				y[n] += h[k]*x[n-k]
+	return y
+
 if __name__ == "__main__":
 
 	# read the raw IQ data from the recorded file

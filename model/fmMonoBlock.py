@@ -16,6 +16,7 @@ import math
 # use fmDemodArctan and fmPlotPSD
 from fmSupportLib import fmDemodArctan, fmPlotPSD
 # for take-home add your functions
+from fmMonoBasic import impulseResponse
 
 rf_Fs = 2.4e6
 rf_Fc = 100e3
@@ -25,10 +26,37 @@ rf_decim = 10
 audio_Fs = 48e3
 audio_decim = 5
 # add other settings for audio, like filter taps, ...
-
+audio_taps = 151
+audio_Fc = 16000
 # flag that keeps track if your code is running for
 # in-lab (il_vs_th = 0) vs takehome (il_vs_th = 1)
 il_vs_th = 0
+
+def demod(I,Q,prev_state):
+	fm_demod = np.zeros(len(I))
+	for k in range(len(I)):
+		if math.pow(I[k],2)+math.pow(Q[k],2) == 0:
+			fm_demod[k] = 0
+			continue
+		if k == 0:
+			fm_demod[k] = (I[k]*(Q[k]-prev_state[0])-Q[k]*(I[k]-prev_state[1]))/(math.pow(I[k],2)+math.pow(Q[k],2))
+		else:
+			fm_demod[k] = (I[k]*(Q[k]-Q[k-1])-Q[k]*(I[k]-I[k-1]))/(math.pow(I[k],2)+math.pow(Q[k],2))
+
+		prev_state = I[-1],Q[-1]
+	return fm_demod,prev_state
+
+def blockConv(h,x,prev_state):
+
+	audio_filt = np.zeros(len(x))
+	for n in range(len(audio_filt)):
+		for k in range (len(h)):
+			if n-k>= 0:
+				audio_filt[n] += h[k]*x[n-k]
+			else:
+				audio_filt[n] += h[k]*prev_state[np.size(prev_state)+n-k]
+		prev_state = x[-(len(h)-1):]
+	return audio_filt,prev_state
 
 if __name__ == "__main__":
 
@@ -48,11 +76,11 @@ if __name__ == "__main__":
 	if il_vs_th == 0:
 		# to be updated by you during the in-lab session based on firwin
 		# same principle  as for rf_coeff (but different arguments, of course)
-		audio_coeff = np.array([])
+		audio_coeff = signal.firwin(audio_taps, audio_Fc/(audio_Fs*5/2), window=('hann'))
 	else:
 		# to be updated by you for the takehome exercise
 		# with your own code for impulse response generation
-		audio_coeff = np.array([])
+		audio_coeff = impulseResponse(audio_Fs*5,audio_Fc,audio_taps)
 
 	# set up the subfigures for plotting
 	subfig_height = np.array([0.8, 2, 1.6]) # relative heights of the subfigures
@@ -70,9 +98,11 @@ if __name__ == "__main__":
 	state_q_lpf_100k = np.zeros(rf_taps-1)
 	state_phase = 0
 	# add state as needed for the mono channel filter
-
+	state_if_lpf_100k = np.zeros(audio_taps-1)
 	# audio buffer that stores all the audio blocks
 	audio_data = np.array([]) # used to concatenate filtered blocks (audio data)
+	state = np.zeros(audio_taps-1)
+	prev_state = np.zeros(2)
 
 	# if the number of samples in the last block is less than the block size
 	# it is fine to ignore the last few samples from the raw IQ file
@@ -104,26 +134,28 @@ if __name__ == "__main__":
 			# https://www.embedded.com/dsp-tricks-frequency-demodulation-algorithms/
 			# see more comments on fmSupportLib.py - take particular notice that
 			# you MUST have also "custom" state-saving for your own FM demodulator
-			dummy_fm, dummy_state = np.array([]), np.array([])
+			dummy_fm, dummy_state = demod(i_ds,q_ds,prev_state)
 
 		# extract the mono audio data through filtering
-		# if il_vs_th == 0:
-		# 	# to be updated by you during the in-lab session based on lfilter
-		# 	# same principle as for i_filt or q_filt (but different arguments)
-		# 	audio_filt = ... change as needed
-		# else:
-		# 	# to be updated by you for the takehome exercise
-		# 	# with your own code for BLOCK convolution
-		# 	audio_filt = ... change as needed
+		if il_vs_th == 0:
+			# to be updated by you during the in-lab session based on lfilter
+			# same principle as for i_filt or q_filt (but different arguments)
+			audio_filt, state_if_lpf_100k = signal.lfilter(audio_coeff, 1.0, \
+					fm_demod,
+					zi=state_if_lpf_100k)
+		else:
+		# to be updated by you for the takehome exercise
+		# 	with your own code for BLOCK convolution
+			audio_filt,state = blockConv(audio_coeff,fm_demod,state)
 
 		# downsample audio data
 		# to be updated by you during in-lab (same code for takehome)
-		# audio_block = ... change as needed
+		audio_block = audio_filt[::audio_decim]
 
 		# concatenate the most recently processed audio_block
 		# to the previous blocks stored already in audio_data
 		#
-		# audio_data = np.concatenate((audio_data, audio_block))
+		audio_data = np.concatenate((audio_data, audio_block))
 		#
 
 		# to save runtime select the range of blocks to log data
@@ -142,9 +174,11 @@ if __name__ == "__main__":
 
 			# plot PSD of selected block after extracting mono audio
 			# ... change as needed
+			fmPlotPSD(ax1, audio_filt, (rf_Fs/rf_decim)/1e3, subfig_height[1], 'Extracted Mono')
 
 			# plot PSD of selected block after downsampling mono audio
 			# ... change as needed
+			fmPlotPSD(ax2, audio_data, audio_Fs/1e3, subfig_height[2], 'Downsampled Mono Audio')
 
 			# save figure to file
 			fig.savefig("../data/fmMonoBlock" + str(block_count) + ".png")
