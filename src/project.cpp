@@ -14,65 +14,92 @@ Ontario, Canada
 #include "iofunc.h"
 #include "logfunc.h"
 
-int main()
+void rfFrontEnd(std::vector<float> &FMDemodData, float RFFS, float IFFS){
+
+
+
+	const std::string in_fname = "../data/float32samples.bin";
+	std::vector<float> audio_data;
+	int BLOCK_SIZE =  1024 * 10 * 2;
+	for( unsigned int block_id = 0; ; block_id++){
+		std::vector<float> block_data(BLOCK_SIZE); 
+		readStdinBlockData(BLOCK_SIZE, block_id, block_data);
+		if ((std::cin.rdstate()) != 0) {
+			std::cerr << "End of input stream reached" << std::end1;
+			exit(1);
+		}
+		std::cerr << "Read block" << block_id << std::end1;
+	}	
+
+
+	//Are these correct?
+	float Fs = 2400000;
+	float Fc = 30000;
+	unsigned short int num_taps = 101;
+	float decim = 10;
+	
+	std::vector<float> h;
+	impulseResponseLPF(Fs, Fc, num_taps, h);
+
+	std::vector<float> mono_block, mono_buffer;
+	mono_buffer.resize(BLOCK_SIZE);
+
+	for(int i = 0; i < audio_data.size(); i += BLOCK_SIZE){
+		blockFiltering(audio_data, mono_block, h, mono_buffer.size(), mono_buffer);
+
+		//Decimate (has to be a better way to do this)
+		FMDemodData.clear();
+	}
+
+	int numDecim = RFFS/IFFS;
+
+	for(int i = 0; i < mono_block.size(); i++){
+		if((i % numDecim) == 0)
+		FMDemodData.push_back(mono_block.at(i));
+	}
+}
+
+
+void monoStereo(std::vector<float> FMDemodData, float RFFS, float IFFS){
+
+}
+
+void RDS(){
+
+}
+
+int main(int argc, char* argv[])
 {
-	// binary files can be generated through the
-	// Python models from the "../model/" sub-folder
-	const std::string in_fname = "../data/fm_demod_10.bin";
-	std::vector<float> bin_data;
-	readBinData(in_fname, bin_data);
+	int mode = 0;
+	if(mode = 0){
+		float RFFs = 2400000;
+		float IFFs = 240000;
+		float audioFs = 48000;	
+	} 
+	if(mode = 1){
+		float RFFs = 1152000;
+		float IFFs = 288000;
+		float audioFs = 48000;	
+	} 
+	if(mode = 2){
+		float RFFs = 2400000;
+		float IFFs = 240000;
+		float audioFs = 44100;	
+	} 
+	if(mode = 3){
+		float RFFs = 1920000;
+		float IFFs = 320000;
+		float audioFs = 44100;	
+	} 
+	
 
-	// generate an index vector to be used by logVector on the X axis
-	std::vector<float> vector_index;
-	genIndexVector(vector_index, bin_data.size());
-	// log time data in the "../data/" subfolder in a file with the following name
-	// note: .dat suffix will be added to the log file in the logVector function
-	logVector("demod_time", vector_index, bin_data);
+	std::vector<float> FMDemodData;
 
-	// take a slice of data with a limited number of samples for the Fourier transform
-	// note: NFFT constant is actually just the number of points for the
-	// Fourier transform - there is no FFT implementation ... yet
-	// unless you wish to wait for a very long time, keep NFFT at 1024 or below
-	std::vector<float> slice_data = \
-		std::vector<float>(bin_data.begin(), bin_data.begin() + NFFT);
-	// note: make sure that binary data vector is big enough to take the slice
+	rfFrontEnd(FMDemodData);
 
-	// declare a vector of complex values for DFT
-	std::vector<std::complex<float>> Xf;
-	// ... in-lab ...
-	// compute the Fourier transform
-	// the function is already provided in fourier.cpp
-
-	// compute the magnitude of each frequency bin
-	// note: we are concerned only with the magnitude of the frequency bin
-	// (there is NO logging of the phase response)
-	std::vector<float> Xmag;
-	// ... in-lab ...
-	// compute the magnitude of each frequency bin
-	// the function is already provided in fourier.cpp
-
-	// log the frequency magnitude vector
-	vector_index.clear();
-	genIndexVector(vector_index, Xmag.size());
-	logVector("demod_freq", vector_index, Xmag); // log only positive freq
-
-	// for your take-home exercise - repeat the above after implementing
-	// your OWN function for PSD based on the Python code that has been provided
-	// note the estimate PSD function should use the entire block of "bin_data"
-	//
-	// ... complete as part of the take-home ...
-	//
-
-	// if you wish to write some binary files, see below example
-	//
-	// const std::string out_fname = "../data/outdata.bin";
-	// writeBinData(out_fname, bin_data);
-	//
-	// output files can be imported, for example, in Python
-	// for additional analysis or alternative forms of visualization
-
-	// naturally, you can comment the line below once you are comfortable to run GNU plot
-	std::cout << "Run: gnuplot -e 'set terminal png size 1024,768' ../data/example.gnuplot > ../data/example.png\n";
-
+	monoStereo(FMDemodData);
+	
+	//RDS();
+	
 	return 0;
 }

@@ -55,7 +55,7 @@ def blockConv(h,x,prev_state):
 				audio_filt[n] += h[k]*x[n-k]
 			else:
 				audio_filt[n] += h[k]*prev_state[np.size(prev_state)+n-k]
-		prev_state = x[-(len(h)-1):]
+	prev_state = x[-(len(h)-1):]
 	return audio_filt,prev_state
 
 if __name__ == "__main__":

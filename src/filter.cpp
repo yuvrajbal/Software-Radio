@@ -28,18 +28,49 @@ void impulseResponseLPF(float Fs, float Fc, unsigned short int num_taps, std::ve
 	}
 }
 
-// function to compute the filtered output "y" by doing the convolution
-// of the input data "x" with the impulse response "h"
-void convolveFIR(std::vector<float> &y, const std::vector<float> &x, const std::vector<float> &h)
+std::vector<float> slice(std::vector<float>temp,int lBound, int rBound)
 {
-	y.clear(); y.resize(x.size()+h.size()-1, 0.0);
-	unsigned int m;
-	unsigned int n;
-	for(m = 0;m<y.size();m++){
-		for(n = 0;n<h.size();n++){
-			if((m-n)>=0 && (m-n)< x.size()){
-				y[m] += h[n]*x[m-n];
-			}
+    auto start = temp.begin() + lBound;
+    auto end = temp.begin() + rBound + 1;
+    std::vector<float>  sliced(rBound - lBound + 1);
+    copy(start, end, sliced.begin());
+    return sliced;
+}
+
+void convolveFIRinBlocks(float *y, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize)
+{
+
+	for (int n = 0; n < blockSize; n++) {
+		for (int k = 0; k < h.size(); k++) {
+				if ((n-k) >= 0) {
+					y[n] = y[n] + h[k]*xblock[n-k];
+				}
+				else{
+					if(abs(n-k) > state.size()){
+						y[n] = y[n] + 0.0;
+					}
+					else{
+						y[n] = y[n] + h[k]*state[state.size()+(n-k)];
+					}
+				}
 		}
 	}
+
+	state = slice(xblock,xblock.size()-h.size()+1, xblock.size()-1);
+
+}
+
+void blockProcess(std::vector<float> &y, const std::vector<float> &x, const std::vector<float> &h, float blockSize, std::vector<float> &state, std::vector<float> &xblock, std::vector<float> &filteredData, const float RFFS, const float IFFS){
+	y.clear(); y.resize(x.size()+h.size()-1, 0.0);
+	state.clear(); state.resize(h.size()-1, 0.0);
+	filteredData.clear(); filteredData.resize(blockSize, 0.0);
+
+
+	for (int m = 0; m < (int)(x.size()/blockSize); m++){
+
+		xblock = slice(x,m*blockSize,(m+1)*blockSize-1);          //code is from lab 2 so still justs splits full .raw file
+
+		convolveFIRinBlocks(&y[m*blockSize], xblock, h, state, blockSize);
+	}
+
 }

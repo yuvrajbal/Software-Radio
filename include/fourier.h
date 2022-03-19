@@ -27,6 +27,10 @@ void computeVectorMagnitude(const std::vector<std::complex<float>> &,
 
 // provide the prototype to estimate PSD
 // ...
+void estimatePSD(const std::vector<float> &,
+	float &,
+	std::vector<float> &,
+	std::vector<float> &);
 
 //////////////////////////////////////////////////////
 
