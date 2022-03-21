@@ -15,7 +15,9 @@ Ontario, Canada
 
 // declaration of a function prototypes
 void impulseResponseLPF(float, float, unsigned short int, std::vector<float> &);
-void convolveFIR(std::vector<float> &, const std::vector<float> &, const std::vector<float> &);
-void blockProcess(std::vector<float> &, const std::vector<float> &, const std::vector<float> &, float, std::vector<float> &, std::vector<float> &, std::vector<float> &, const float, const float);
+std::vector<float> slice(std::vector<float>, int, int);
+void convolveFIRinBlocks(float *, const std::vector<float> &, const std::vector<float> &, std::vector<float> &, float, const int, const int);
+void blockProcess(std::vector<float> &, const std::vector<float> &, const std::vector<float> &, float blockSize, std::vector<float> &, std::vector<float> &, std::vector<float> &, const int, const int);
+
 
 #endif // DY4_FILTER_H
