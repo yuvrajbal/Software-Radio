@@ -9,6 +9,7 @@ Ontario, Canada
 #include "dy4.h"
 #include "filter.h"
 #include "genfunc.h"
+
 // function to compute the impulse response "h" based on the sinc function
 void impulseResponseLPF(float Fs, float Fc, unsigned short int num_taps, std::vector<float> &h)
 {
@@ -37,22 +38,24 @@ std::vector<float> slice(std::vector<float>temp,int lBound, int rBound)
     return sliced;
 }
 
-void convolveFIRinBlocks(float *y, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize)
+void convolveFIRinBlocks(float *y, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize, const int RFFS, const int IFFS)
 {
 
-	for (int n = 0; n < blockSize; n++) {
-		for (unsigned int k = 0; k < h.size(); k++) {
-				if ((n-k) >= 0) {
-					y[n] = y[n] + h[k]*xblock[n-k];
+	int rf_decim = RFFS/IFFS;
+
+	for (int n = 0; n < blockSize/rf_decim; n++) {
+		for (int k = 0; k < h.size(); k++) {
+			if ((n*rf_decim-k) >= 0) {
+				y[n*rf_decim] += h[k]*xblock[n*rf_decim-k];
+			}
+			else{
+				if(abs(n*rf_decim-k) > state.size()){
+					y[n*rf_decim] += 0.0;
 				}
 				else{
-					if(abs(n-k) > state.size()){
-						y[n] = y[n] + 0.0;
-					}
-					else{
-						y[n] = y[n] + h[k]*state[state.size()+(n-k)];
-					}
+					y[n*rf_decim] += h[k]*state[state.size()+(n*rf_decim-k)];
 				}
+			}
 		}
 	}
 
@@ -60,7 +63,7 @@ void convolveFIRinBlocks(float *y, const std::vector<float> &xblock, const std::
 
 }
 
-void blockProcess(std::vector<float> &y, const std::vector<float> &x, const std::vector<float> &h, float blockSize, std::vector<float> &state, std::vector<float> &xblock, std::vector<float> &filteredData, const float RFFS, const float IFFS){
+void blockProcess(std::vector<float> &y, const std::vector<float> &x, const std::vector<float> &h, float blockSize, std::vector<float> &state, std::vector<float> &xblock, std::vector<float> &filteredData, const int RFFS, const int IFFS){
 	y.clear(); y.resize(x.size()+h.size()-1, 0.0);
 	state.clear(); state.resize(h.size()-1, 0.0);
 	filteredData.clear(); filteredData.resize(blockSize, 0.0);
@@ -70,7 +73,7 @@ void blockProcess(std::vector<float> &y, const std::vector<float> &x, const std:
 
 		xblock = slice(x,m*blockSize,(m+1)*blockSize-1);          //code is from lab 2 so still justs splits full .raw file
 
-		convolveFIRinBlocks(&y[m*blockSize], xblock, h, state, blockSize);
+		convolveFIRinBlocks(&y[m*blockSize], xblock, h, state, blockSize, RFFS, IFFS);
 	}
 
 }
