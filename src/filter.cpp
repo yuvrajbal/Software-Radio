@@ -41,7 +41,7 @@ void convolveFIRinBlocks(float *y, const std::vector<float> &xblock, const std::
 {
 
 	for (int n = 0; n < blockSize; n++) {
-		for (int k = 0; k < h.size(); k++) {
+		for (unsigned int k = 0; k < h.size(); k++) {
 				if ((n-k) >= 0) {
 					y[n] = y[n] + h[k]*xblock[n-k];
 				}
