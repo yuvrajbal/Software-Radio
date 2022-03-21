@@ -38,22 +38,20 @@ std::vector<float> slice(std::vector<float>temp,int lBound, int rBound)
     return sliced;
 }
 
-void convolveFIRinBlocks(float *y, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize, const int RFFS, const int IFFS)
+void convolveFIRinBlocks(float *y_ds, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize, const int rf_decim)
 {
-
-	int rf_decim = RFFS/IFFS;
 
 	for (int n = 0; n < blockSize/rf_decim; n++) {
 		for (int k = 0; k < h.size(); k++) {
 			if ((n*rf_decim-k) >= 0) {
-				y[n*rf_decim] += h[k]*xblock[n*rf_decim-k];
+				y_ds[n] += h[k]*xblock[n*rf_decim-k];
 			}
 			else{
 				if(abs(n*rf_decim-k) > state.size()){
-					y[n*rf_decim] += 0.0;
+					y_ds[n] += 0.0;
 				}
 				else{
-					y[n*rf_decim] += h[k]*state[state.size()+(n*rf_decim-k)];
+					y_ds[n] += h[k]*state[state.size()+(n*rf_decim-k)];
 				}
 			}
 		}
@@ -63,17 +61,17 @@ void convolveFIRinBlocks(float *y, const std::vector<float> &xblock, const std::
 
 }
 
-void blockProcess(std::vector<float> &y, const std::vector<float> &x, const std::vector<float> &h, float blockSize, std::vector<float> &state, std::vector<float> &xblock, std::vector<float> &filteredData, const int RFFS, const int IFFS){
-	y.clear(); y.resize(x.size()+h.size()-1, 0.0);
+void blockProcess(std::vector<float> &y_ds, const std::vector<float> &x, const std::vector<float> &h, float blockSize, std::vector<float> &state, std::vector<float> &xblock, std::vector<float> &filteredData, const int rf_decim){
+	y_ds.clear(); y_ds.resize((x.size()+h.size())/10 - 1, 0.0);
 	state.clear(); state.resize(h.size()-1, 0.0);
 	filteredData.clear(); filteredData.resize(blockSize, 0.0);
 
 
 	for (int m = 0; m < (int)(x.size()/blockSize); m++){
 
-		xblock = slice(x,m*blockSize,(m+1)*blockSize-1);          //code is from lab 2 so still justs splits full .raw file
+		xblock = slice(x,m*blockSize,(m+1)*blockSize-1);
 
-		convolveFIRinBlocks(&y[m*blockSize], xblock, h, state, blockSize, RFFS, IFFS);
+		convolveFIRinBlocks(&y_ds[m*blockSize/rf_decim], xblock, h, state, blockSize, rf_decim);
 	}
 
 }
