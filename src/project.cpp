@@ -14,7 +14,7 @@ Ontario, Canada
 #include "iofunc.h"
 #include "logfunc.h"
 
-void rfFrontEnd(std::vector<float> &FMDemodData, float RFFS, float IFFS,int BLOCK_SIZE){
+void rfFrontEnd(std::vector<float> &FMDemodData, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim){
 
 
 	const std::string in_fname = "../data/iq_samples.raw";
@@ -31,34 +31,47 @@ void rfFrontEnd(std::vector<float> &FMDemodData, float RFFS, float IFFS,int BLOC
 
 
 	//Are these correct?
-	// float Fs = 2400000;
-	// float Fc = 30000;
-	// unsigned short int num_taps = 101;
-	// float decim = 10;
-	//
-	// std::vector<float> h;
-	// impulseResponseLPF(Fs, Fc, num_taps, h);
-	//
-	// std::vector<float> mono_block, mono_buffer;
-	// mono_buffer.resize(BLOCK_SIZE);
-	//
-	// for(int i = 0; i < audio_data.size(); i += BLOCK_SIZE){
-	// 	blockFiltering(audio_data, mono_block, h, mono_buffer.size(), mono_buffer);
-	//
-	// 	//Decimate (has to be a better way to do this)
-	// 	FMDemodData.clear();
+	float Fc = 30000;
+	unsigned short int num_taps = 101;
+
+	std::vector<float> h;
+	impulseResponseLPF(RFFS, Fc, num_taps, h);
+
+	std::vector<float> mono_block, mono_buffer;
+	mono_buffer.resize(BLOCK_SIZE);
+
+	for(unsigned int i = 0; i < audio_data.size(); i += BLOCK_SIZE){
+		//blockProcess(mono_block, audio_data, h, mono_buffer.size(), mono_buffer,rf_decim);
+
+		//FMDemodData.clear();
+	}
+
+	//int numDecim = RFFS/IFFS;
+	// for(unsigned int i = 0; i < mono_block.size(); i++){
+	// 	if((i % numDecim) == 0){
+	//  		FMDemodData.push_back(mono_block.at(i));
+	// 	}
 	// }
-	//
-	// int numDecim = RFFS/IFFS;
-	//
-	// for(int i = 0; i < mono_block.size(); i++){
-	// 	if((i % numDecim) == 0)
-	// 	FMDemodData.push_back(mono_block.at(i));
-	// }
+
+	int block_count = 0
+	std::vector<float> I(BLOCK_SIZE);
+	std::vector<float> Q(BLOCK_SIZE);
+	std::vector<float> i_state(num_taps-1);
+	std::vector<float> q_state(num_taps-1);
+	std::vector<float> prev_state(2);
+
+	while((block_count+1)*BLOCK_SIZE < audio_data.size()){
+
+
+
+		block_count+=1;
+	}
 }
 
 
 void monoStereo(std::vector<float> FMDemodData, float RFFS, float IFFS, int BLOCK_SIZE){
+
+
 
 }
 
@@ -106,10 +119,12 @@ int main(int argc, char* argv[])
 	float RFFS = 2400000;
 	float IFFS = 240000;
 	float audioFS = 48000;
-	int BLOCK_SIZE =  1024 * 10 * 2;
+	int rf_decim = 10;
+	int audio_decim;
+	int BLOCK_SIZE =  1024 * rf_decim * 2;
 	std::vector<float> FMDemodData;
 
-	rfFrontEnd(FMDemodData,RFFS,IFFS,BLOCK_SIZE);
+	rfFrontEnd(FMDemodData,RFFS,IFFS,BLOCK_SIZE,rf_decim);
 
 	monoStereo(FMDemodData,RFFS,IFFS,BLOCK_SIZE);
 

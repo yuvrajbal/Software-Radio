@@ -9,7 +9,7 @@ Ontario, Canada
 #include "dy4.h"
 #include "filter.h"
 #include "genfunc.h"
-
+#include  "math.h"
 // function to compute the impulse response "h" based on the sinc function
 void impulseResponseLPF(float Fs, float Fc, unsigned short int num_taps, std::vector<float> &h)
 {
@@ -74,4 +74,18 @@ void blockProcess(std::vector<float> &y_ds, const std::vector<float> &x, const s
 		convolveFIRinBlocks(&y_ds[m*blockSize/rf_decim], xblock, h, state, blockSize, rf_decim);
 	}
 
+}
+void demod(std::vector<float> &fm_demod,const std::vector<float> &I,const std::vector<float> &Q,std::vector<float> &prev_state){
+	for(unsigned int k = 0;k<I.size();k++){
+		if(pow(I[k])+pow(Q[k]) == 0){
+			fm_demod[k] = 0;
+			continue;
+		}
+		if(k==0){
+			fm_demod[k] = (I[k]*(Q[k]-prev_state[0])-Q[k]*(I[k]-prev_state[1]))/(pow(I[k])+pow(Q[k]))
+		}else{
+			fm_demod[k] = (I[k]*(Q[k]-Q[k-1])-Q[k]*(I[k]-I[k-1]))/(pow(I[k])+pow(Q[k]))
+		}
+	prev_state = I[I.size()-1],Q[Q.size()-1];
+	}
 }
