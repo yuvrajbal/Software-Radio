@@ -38,7 +38,7 @@ std::vector<float> slice(std::vector<float>temp,int lBound, int rBound)
     return sliced;
 }
 
-void convolveFIRinBlocks(float *y_ds, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize, const int rf_decim)
+void convolveFIRinBlocks(std::vector<float> &y_ds, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize, const int rf_decim)
 {
 
 	for (int n = 0; n < blockSize/rf_decim; n++) {
@@ -62,7 +62,7 @@ void convolveFIRinBlocks(float *y_ds, const std::vector<float> &xblock, const st
 }
 
 void blockProcess(std::vector<float> &y_ds, const std::vector<float> &x, const std::vector<float> &h, float blockSize, std::vector<float> &state, std::vector<float> &xblock, std::vector<float> &filteredData, const int rf_decim){
-	y_ds.clear(); y_ds.resize((x.size()+h.size())/10 - 1, 0.0);
+	y_ds.clear(); y_ds.resize((x.size()+h.size())/rf_decim - 1, 0.0);
 	state.clear(); state.resize(h.size()-1, 0.0);
 	filteredData.clear(); filteredData.resize(blockSize, 0.0);
 
@@ -71,21 +71,32 @@ void blockProcess(std::vector<float> &y_ds, const std::vector<float> &x, const s
 
 		xblock = slice(x,m*blockSize,(m+1)*blockSize-1);
 
-		convolveFIRinBlocks(&y_ds[m*blockSize/rf_decim], xblock, h, state, blockSize, rf_decim);
+		convolveFIRinBlocks(y_ds[m*blockSize/rf_decim], xblock, h, state, blockSize, rf_decim);
 	}
 
 }
 void demod(std::vector<float> &fm_demod,const std::vector<float> &I,const std::vector<float> &Q,std::vector<float> &prev_state){
 	for(unsigned int k = 0;k<I.size();k++){
-		if(pow(I[k])+pow(Q[k]) == 0){
+		if(pow(I[k],2)+pow(Q[k],2) == 0){
 			fm_demod[k] = 0;
 			continue;
 		}
 		if(k==0){
-			fm_demod[k] = (I[k]*(Q[k]-prev_state[0])-Q[k]*(I[k]-prev_state[1]))/(pow(I[k])+pow(Q[k]))
+			fm_demod[k] = (I[k]*(Q[k]-prev_state[0])-Q[k]*(I[k]-prev_state[1]))/(pow(I[k],2)+pow(Q[k],2));
 		}else{
-			fm_demod[k] = (I[k]*(Q[k]-Q[k-1])-Q[k]*(I[k]-I[k-1]))/(pow(I[k])+pow(Q[k]))
+			fm_demod[k] = (I[k]*(Q[k]-Q[k-1])-Q[k]*(I[k]-I[k-1]))/(pow(I[k],2)+pow(Q[k],2));
 		}
-	prev_state = I[I.size()-1],Q[Q.size()-1];
+	prev_state[0] = *(I.end() - 1);
+	prev_state[1] = *(Q.end() - 1);
+	}
+}
+
+void split_audio_into_channels(const std::vector<float> &audio_data, std::vector<float> &audio_I, std::vector<float> &audio_Q)
+{
+	for (unsigned int i=0; i<audio_data.size(); i++) {
+		if (i%2 == 0)
+			audio_I.push_back(audio_data[i]);
+		else
+			audio_Q.push_back(audio_data[i]);
 	}
 }
