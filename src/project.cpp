@@ -17,7 +17,6 @@ Ontario, Canada
 void rfFrontEnd(std::vector<float> &FMDemodData, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim){
 
 
-	const std::string in_fname = "../data/iq_samples.raw";
 	std::vector<float> block_data;
 	for( unsigned int block_id = 0; ; block_id++){
 		std::vector<float> block_data(BLOCK_SIZE);
@@ -69,17 +68,16 @@ void rfFrontEnd(std::vector<float> &FMDemodData, float RFFS, float IFFS,int BLOC
 
 	/*processing flow (process all blocks entirely, then output?? or while(read block > process  > output block)?)
 	---Is writing done in blocks or all data at once?
-	
-	
+
+
 	How do we read the data from the file
 	how do we get size of the input audio file
 	*/
-	while((block_count+1)*BLOCK_SIZE < I_data.size()){              
 
 
 		I_block = slice(I_data, block_count*BLOCK_SIZE, (block_count + 1)*BLOCK_SIZE);
 		Q_block = slice(Q_data, block_count*BLOCK_SIZE, (block_count + 1)*BLOCK_SIZE);
-		
+
 		//Might have to change to filter single block
 		convolveFIRinBlocks(I, I_block, h, i_state, BLOCK_SIZE, 10);
 		convolveFIRinBlocks(Q, Q_block, h, q_state, BLOCK_SIZE, 10);
@@ -104,12 +102,12 @@ void rfFrontEnd(std::vector<float> &FMDemodData, float RFFS, float IFFS,int BLOC
 
 		block_count+=1;
 	}
-}
+
 
 
 void monoStereo(std::vector<float> FMDemodData, float RFFS, float IFFS, int BLOCK_SIZE){
 
-	
+
 
 }
 
@@ -177,7 +175,7 @@ int main(int argc, char* argv[])
 
 	//std::vector<float> FMDemodData;
 	//rfFrontEnd(FMDemodData,RFFS,IFFS,BLOCK_SIZE,rf_decim);
-	
+
 	std::vector<float> mono_data(audio_data.size());
 	rfFrontEnd(mono_data,RFFS,IFFS,BLOCK_SIZE,rf_decim);
 
@@ -185,7 +183,7 @@ int main(int argc, char* argv[])
 
 	//RDS();
 	//std::vector<float> processed_data(BLOCK_SIZE);
-	
+
 	//std::vector<float> audio(BLOCK_SIZE);
 	// std::vector<float> audio(RFFS);
 	// for(unsigned int k = 0;k<mono_data.size();k++){
