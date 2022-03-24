@@ -40,7 +40,7 @@ std::vector<float> slice(std::vector<float>temp,int lBound, int rBound)
 
 void convolveFIRinBlocks(std::vector<float> &y_ds, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize, const int rf_decim)
 {
-
+	y_ds.clear(); y_ds.resize((xblock.size()+h.size())/rf_decim - 1, 0.0);
 	for (int n = 0; n < blockSize/rf_decim; n++) {
 		for (int k = 0; k < h.size(); k++) {
 			if ((n*rf_decim-k) >= 0) {
@@ -61,20 +61,20 @@ void convolveFIRinBlocks(std::vector<float> &y_ds, const std::vector<float> &xbl
 
 }
 
-void blockProcess(std::vector<float> &y_ds, const std::vector<float> &x, const std::vector<float> &h, float blockSize, std::vector<float> &state, std::vector<float> &xblock, std::vector<float> &filteredData, const int rf_decim){
-	y_ds.clear(); y_ds.resize((x.size()+h.size())/rf_decim - 1, 0.0);
-	state.clear(); state.resize(h.size()-1, 0.0);
-	filteredData.clear(); filteredData.resize(blockSize, 0.0);
-
-
-	for (int m = 0; m < (int)(x.size()/blockSize); m++){
-
-		xblock = slice(x,m*blockSize,(m+1)*blockSize-1);
-
-		convolveFIRinBlocks(y_ds[m*blockSize/rf_decim], xblock, h, state, blockSize, rf_decim);
-	}
-
-}
+// void blockProcess(std::vector<float> &y_ds, const std::vector<float> &x, const std::vector<float> &h, float blockSize, std::vector<float> &state, std::vector<float> &xblock, std::vector<float> &filteredData, const int rf_decim){
+// 	y_ds.clear(); y_ds.resize((x.size()+h.size())/rf_decim - 1, 0.0);
+// 	state.clear(); state.resize(h.size()-1, 0.0);
+// 	filteredData.clear(); filteredData.resize(blockSize, 0.0);
+//
+//
+// 	for (int m = 0; m < (int)(x.size()/blockSize); m++){
+//
+// 		xblock = slice(x,m*blockSize,(m+1)*blockSize-1);
+//
+// 		convolveFIRinBlocks(y_ds[m*blockSize/rf_decim], xblock, h, state, blockSize, rf_decim);
+// 	}
+//
+// }
 void demod(std::vector<float> &fm_demod,const std::vector<float> &I,const std::vector<float> &Q,std::vector<float> &prev_state){
 	for(unsigned int k = 0;k<I.size();k++){
 		if(pow(I[k],2)+pow(Q[k],2) == 0){
