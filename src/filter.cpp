@@ -76,7 +76,7 @@ void convolveFIRinBlocks(std::vector<float> &y_ds, const std::vector<float> &xbl
 //
 // }
 void demod(std::vector<float> &fm_demod,const std::vector<float> &I,const std::vector<float> &Q,std::vector<float> &prev_state){
-	for(unsigned int k = 0;k<I.size();k++){
+	for(int k = 0;k<I.size();k++){
 		if(pow(I[k],2)+pow(Q[k],2) == 0){
 			fm_demod[k] = 0;
 			continue;

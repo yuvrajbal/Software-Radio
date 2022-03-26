@@ -14,6 +14,7 @@ Ontario, Canada
 #include "iofunc.h"
 #include "logfunc.h"
 #include <cmath>
+#include <algorithm>
 void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim){
 	//std::vector<float> block_data(BLOCK_SIZE);
 
@@ -50,10 +51,54 @@ void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK
 
 	convolveFIRinBlocks(Q, Q_block, h, q_state, BLOCK_SIZE/2, rf_decim);
 
+	std::cerr << *std::max_element(I.begin(), I.begin()+BLOCK_SIZE/2) << std::endl;
+	std::cerr << *std::max_element(Q.begin(), Q.begin()+BLOCK_SIZE/2) << std::endl;
+
 	std::vector<float> fm_demod;
 	fm_demod.clear();fm_demod.resize(I.size(),0.0);
 
 	demod(fm_demod,I,Q,prev_state);
+
+	std::cerr << *std::max_element(fm_demod.begin(), fm_demod.begin()+BLOCK_SIZE/2) << std::endl;
+
+	//------------plotting fm_demod to verify-----------------------
+	std::vector<float> vector_index;
+	genIndexVector(vector_index, fm_demod.size());
+	// log time data in the "../data/" subfolder in a file with the following name
+	// note: .dat suffix will be added to the log file in the logVector function
+	logVector("demod_time", vector_index, fm_demod);
+
+	// take a slice of data with a limited number of samples for the Fourier transform
+	// note: NFFT constant is actually just the number of points for the
+	// Fourier transform - there is no FFT implementation ... yet
+	// unless you wish to wait for a very long time, keep NFFT at 1024 or below
+	std::vector<float> slice_data = \
+		std::vector<float>(fm_demod.begin(), fm_demod.begin() + NFFT);
+	// note: make sure that binary data vector is big enough to take the slice
+
+	// declare a vector of complex values for DFT
+  std::vector<std::complex<float>> Xf;
+	// ... in-lab ...
+	DFT(slice_data, Xf);
+	// compute the Fourier transform
+	// the function is already provided in fourier.cpp
+
+	// compute the magnitude of each frequency bin
+	// note: we are concerned only with the magnitude of the frequency bin
+	// (there is NO logging of the phase response)
+	std::vector<float> Xmag;
+	// ... in-lab ...
+	computeVectorMagnitude(Xf, Xmag);
+	// compute the magnitude of each frequency bin
+	// the function is already provided in fourier.cpp
+
+	// log the frequency magnitude vector
+	vector_index.clear();
+	genIndexVector(vector_index, Xmag.size());
+	logVector("demod_freq", vector_index, Xmag); // log only positive freq
+
+	std::cerr << "Run: gnuplot -e 'set terminal png size 1024,768' ../data/example.gnuplot > ../data/example.png\n";
+	//---------------------------------------------------------------------------
 
 	std::vector<float> h2;
 	impulseResponseLPF(IFFS, 16000, num_taps, h2);
@@ -64,15 +109,20 @@ void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK
 
 	convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
 
+	std::cerr << *std::max_element(audio.begin(), audio.end()) << std::endl;
+
 	std::vector<float> mono_data;
-	mono_data.clear();mono_data.resize(I_block.size()/mono0Decim);
+	mono_data.clear();mono_data.resize(audio.size());
 
 	for(unsigned int k = 0;k<audio.size();k++){
 		if(std::isnan(audio[k])) mono_data[k] = 0;
 		else mono_data[k] = static_cast<short int>(audio[k]*16384);
 	}
-	//std::cerr << "output";
-	fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);
+	std::cerr << *std::max_element(mono_data.begin(), mono_data.begin()+audio.size()) << std::endl;
+	std::cerr << audio.size() << std::endl;
+	std::cerr << mono_data.size() << std::endl;
+
+	fwrite(&mono_data[0],sizeof(short int),audio.size(),stdout);
 
 }
 void monoStereo(std::vector<float> FMDemodData, float RFFS, float IFFS, int BLOCK_SIZE){
