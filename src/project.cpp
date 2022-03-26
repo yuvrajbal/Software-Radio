@@ -14,7 +14,28 @@ Ontario, Canada
 #include "iofunc.h"
 #include "logfunc.h"
 #include <cmath>
-void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim){
+#include <thread>
+#include <iostream>
+#include <mutex>
+#include <queue>
+#include <condition_variable>
+
+
+class demodData{
+	public:
+	demodData(std::vector<float> val){block = val;}
+	std::vector<float> block;
+	bool monoRead = false;
+	bool RDSRead = false;
+};
+
+void updateQueue(std::queue<demodData> &dataQueue){
+	if((dataQueue.front().monoRead) && (dataQueue.front().RDSRead)){
+		dataQueue.pop();
+	}
+}
+
+void rfFrontEnd(std::mutex &my_mutex, std::condition_variable &my_cvar, std::queue<demodData> dataQueue, std::queue<demodData> &block_data, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim){
 	//std::vector<float> block_data(BLOCK_SIZE);
 
 	float Fc = 100000;	//RF cutoff 100Khz
@@ -74,14 +95,49 @@ void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK
 	//std::cerr << "output";
 	fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);
 
+	//Figure out what goes where
+
+	//Critical section
+	std::unique_lock<std::mutex> my_lock(my_mutex);
+	dataQueue.push(demodData(fm_demod));
+	my_lock.unlock();
+
+	//Critical section ends
+
 }
-void monoStereo(std::vector<float> FMDemodData, float RFFS, float IFFS, int BLOCK_SIZE){
+void monoStereo(std::mutex &my_mutex, std::condition_variable &my_cvar, std::queue<demodData> dataQueue, float RFFS, float IFFS, int BLOCK_SIZE){
 
+	//Read from queue first
+	//Critical section
+	std::unique_lock<std::mutex> my_lock(my_mutex);
+	while(dataQueue.empty()){
+		my_cvar.wait(my_lock);
+	}
+	std::vector<float> block = (dataQueue.front()).block;
+	(dataQueue.front()).monoRead = true;
+	updateQueue(dataQueue);
+	my_lock.unlock();
+
+	//Critical section ends
+	//Process data after
 
 }
 
-void RDS(){
+void RDS(std::mutex &my_mutex, std::condition_variable &my_cvar, std::queue<demodData> &dataQueue){
+	
+	//Read from queue first
+	//Critical section
+	std::unique_lock<std::mutex> my_lock(my_mutex);
+	while(dataQueue.empty()){
+		my_cvar.wait(my_lock);
+	}
+	std::vector<float> block = (dataQueue.front()).block;
+	(dataQueue.front()).RDSRead = true;
+	updateQueue(dataQueue);
+	my_lock.unlock();
 
+	//critical section ends
+	//Process data after
 }
 
 int main(int argc, char* argv[])
@@ -139,6 +195,8 @@ int main(int argc, char* argv[])
 	// 	}
 	// 	std::cerr << "Read block" << block_id << "\n";
 	// }
+
+	/*
 	for( unsigned int block_id = 0; ; block_id++){
 		std::vector<float> block_data(BLOCK_SIZE);
 		readStdinBlockData(BLOCK_SIZE, block_id, block_data);
@@ -157,7 +215,19 @@ int main(int argc, char* argv[])
 		//RDS();
 
 	}
+	*/
 
+	std::queue<demodData> dataQueue;
+	std::mutex my_mutex;
+	std::condition_variable my_cvar;
+
+	std::thread tFrontEnd = std::thread(rfFrontEnd, 'a', std::ref(my_mutex), std::ref(my_cvar), std::ref(dataQueue));
+	std::thread tMonoStereo = std::thread(monoStereo, 'b', std::ref(my_mutex), std::ref(my_cvar), std::ref(dataQueue));
+	std::thread tRDS = std::thread(RDS, 'c', std::ref(my_mutex), std::ref(my_cvar), std::ref(dataQueue));
+
+	tFrontEnd.join();
+	tMonoStereo.join();
+	tRDS.join();
 
 	return 0;
 }
