@@ -113,9 +113,11 @@ void monoStereo(std::mutex &my_mutex, std::condition_variable &my_cvar, std::que
 	while(dataQueue.empty()){
 		my_cvar.wait(my_lock);
 	}
-	std::vector<float> block = (dataQueue.front()).block;
-	(dataQueue.front()).monoRead = true;
-	updateQueue(dataQueue);
+	if(!(dataQueue.front()).monoRead){
+		std::vector<float> block = (dataQueue.front()).block;
+		(dataQueue.front()).monoRead = true;
+		updateQueue(dataQueue);
+	}
 	my_lock.unlock();
 
 	//Critical section ends
@@ -131,9 +133,11 @@ void RDS(std::mutex &my_mutex, std::condition_variable &my_cvar, std::queue<demo
 	while(dataQueue.empty()){
 		my_cvar.wait(my_lock);
 	}
-	std::vector<float> block = (dataQueue.front()).block;
-	(dataQueue.front()).RDSRead = true;
-	updateQueue(dataQueue);
+	if(!(dataQueue.front()).RDSRead){
+		std::vector<float> block = (dataQueue.front()).block;
+		(dataQueue.front()).RDSRead = true;
+		updateQueue(dataQueue);
+	}
 	my_lock.unlock();
 
 	//critical section ends
