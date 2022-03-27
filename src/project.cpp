@@ -72,18 +72,22 @@ void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK
 
 	if(block_id >= 10 && block_id < 12){
 		//------------plotting fm_demod to verify-----------------------
+		const std::string in_fname = "../data/fm_demod_11.bin";
+		std::vector<float> bin_data;
+		readBinData(in_fname, bin_data);
+
 		std::vector<float> vector_index;
-		genIndexVector(vector_index, fm_demod.size());
+		genIndexVector(vector_index, bin_data.size());
 		// log time data in the "../data/" subfolder in a file with the following name
 		// note: .dat suffix will be added to the log file in the logVector function
-		logVector("demod_time", vector_index, fm_demod);
+		logVector("demod_time", vector_index, bin_data);
 
 		// take a slice of data with a limited number of samples for the Fourier transform
 		// note: NFFT constant is actually just the number of points for the
 		// Fourier transform - there is no FFT implementation ... yet
 		// unless you wish to wait for a very long time, keep NFFT at 1024 or below
 		std::vector<float> slice_data = \
-			std::vector<float>(fm_demod.begin(), fm_demod.begin() + NFFT);
+			std::vector<float>(bin_data.begin(), bin_data.begin() + NFFT);
 		// note: make sure that binary data vector is big enough to take the slice
 
 		// declare a vector of complex values for DFT
@@ -110,9 +114,10 @@ void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK
 		std::vector<float> psd_est;
 		float psdFS = 240;
 
-		vector_index.clear();
-		estimatePSD(fm_demod,psdFS,freq,psd_est);
-		genIndexVector(vector_index, psd_est.size());
+		//vector_index.clear();
+		//estimatePSD(fm_demod,psdFS,freq,psd_est);
+		//estimatePSD(bin_data, psdFS, freq, psd_est);
+		//genIndexVector(vector_index, psd_est.size());
 		logVector("demod_psd", vector_index, psd_est);
 		std::cerr << "Run: gnuplot -e 'set terminal png size 1024,768' ../data/example.gnuplot > ../data/example.png\n";
 		//---------------------------------------------------------------------------

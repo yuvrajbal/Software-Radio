@@ -40,7 +40,7 @@ std::vector<float> slice(std::vector<float>temp,int lBound, int rBound)
 
 void convolveFIRinBlocks(std::vector<float> &y_ds, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize, const int rf_decim)
 {
-	y_ds.clear(); y_ds.resize((xblock.size()+h.size())/rf_decim - 1, 0.0);
+	y_ds.clear(); y_ds.resize((xblock.size())/rf_decim, 0.0);
 	for (int n = 0; n < blockSize/rf_decim; n++) {
 		for (int k = 0; k < h.size(); k++) {
 			if ((n*rf_decim-k) >= 0) {
