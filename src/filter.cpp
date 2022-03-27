@@ -58,8 +58,11 @@ void convolveFIRinBlocks(std::vector<float> &y_ds, const std::vector<float> &xbl
 	}
 
 	state = slice(xblock,xblock.size()-h.size()+1, xblock.size()-1);
-
+	//for(auto i = 0;i<state.size();i++){
+	//	state[i] = xblock[(xblock.size()-state.size()+i)];
+	//}
 }
+
 
 // void blockProcess(std::vector<float> &y_ds, const std::vector<float> &x, const std::vector<float> &h, float blockSize, std::vector<float> &state, std::vector<float> &xblock, std::vector<float> &filteredData, const int rf_decim){
 // 	y_ds.clear(); y_ds.resize((x.size()+h.size())/rf_decim - 1, 0.0);

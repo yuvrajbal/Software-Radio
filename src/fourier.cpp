@@ -251,4 +251,3 @@ void FFT_optimized(const std::vector<std::complex<float>> &x, \
     step_size *= 2;
   }
 }
-
