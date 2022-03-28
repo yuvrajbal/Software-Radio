@@ -47,77 +47,11 @@ void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK
 
 	convolveFIRinBlocks(Q, Q_block, h, q_state, Q_block.size(), rf_decim);
 
-	//std::cerr << " i state" << *std::max_element(i_state.begin(), i_state.begin()+100) << std::endl;
-	//std::cerr << " q state" << *std::max_element(q_state.begin(), q_state.begin()+100) << std::endl;
-
-	std::cerr << "block data " << *std::max_element(block_data.begin(), block_data.begin()+BLOCK_SIZE) << std::endl;
-	std::cerr << "I_block "  << *std::max_element(I_block.begin(), I_block.begin()+BLOCK_SIZE/2) << std::endl;
-	std::cerr << "Q_block " <<*std::max_element(Q_block.begin(), Q_block.begin()+BLOCK_SIZE/2) << std::endl;
-	std::cerr << "I " <<*std::max_element(I.begin(), I.begin()+I.size()-1) << std::endl;
-	std::cerr << "Q " << *std::max_element(Q.begin(), Q.begin()+I.size()-1) << std::endl;
-
 	std::vector<float> fm_demod;
 	fm_demod.clear();fm_demod.resize(I.size(),0.0);
 	// Demod function
 	demod(fm_demod,I,Q,prev_state);
 
-	std::cerr << "prev state 0" << prev_state[0] << std::endl;
-	std::cerr << "prev state 1" << prev_state[1] << std::endl;
-
-	std::cerr << "fmdemod " << *std::max_element(fm_demod.begin(), fm_demod.begin()+I.size()-1) << std::endl;
-
-	// if(block_id >= 10 && block_id < 12){
-	// 	//------------plotting fm_demod to verify-----------------------
-	// 	const std::string in_fname = "../data/fm_demod_11.bin";
-	// 	std::vector<float> bin_data;
-	// 	readBinData(in_fname, bin_data);
-	//
-	// 	std::vector<float> vector_index;
-	// 	genIndexVector(vector_index, fm_demod.size());
-	// 	// log time data in the "../data/" subfolder in a file with the following name
-	// 	// note: .dat suffix will be added to the log file in the logVector function
-	// 	logVector("demod_time", vector_index, fm_demod);
-	//
-	// 	// take a slice of data with a limited number of samples for the Fourier transform
-	// 	// note: NFFT constant is actually just the number of points for the
-	// 	// Fourier transform - there is no FFT implementation ... yet
-	// 	// unless you wish to wait for a very long time, keep NFFT at 1024 or below
-	// 	std::vector<float> slice_data = \
-	// 		std::vector<float>(fm_demod.begin(), fm_demod.begin() + NFFT);
-	// 	// note: make sure that binary data vector is big enough to take the slice
-	//
-	// 	// declare a vector of complex values for DFT
-	//   std::vector<std::complex<float>> Xf;
-	// 	// ... in-lab ...
-	// 	DFT(slice_data, Xf);
-	// 	// compute the Fourier transform
-	// 	// the function is already provided in fourier.cpp
-	//
-	// 	// compute the magnitude of each frequency bin
-	// 	// note: we are concerned only with the magnitude of the frequency bin
-	// 	// (there is NO logging of the phase response)
-	// 	std::vector<float> Xmag;
-	// 	// ... in-lab ...
-	// 	computeVectorMagnitude(Xf, Xmag);
-	// 	// compute the magnitude of each frequency bin
-	// 	// the function is already provided in fourier.cpp
-	//
-	// 	// log the frequency magnitude vector
-	// 	vector_index.clear();
-	// 	genIndexVector(vector_index, Xmag.size());
-	// 	logVector("demod_freq", vector_index, Xmag); // log only positive freq
-	// 	std::vector<float> freq;
-	// 	std::vector<float> psd_est;
-	// 	float psdFS = 240;
-	//
-	// 	//vector_index.clear();
-	// 	estimatePSD(fm_demod,psdFS,freq,psd_est);
-	// 	//estimatePSDtest(bin_data, psdFS, freq, psd_est);
-	// 	genIndexVector(vector_index, psd_est.size());
-	// 	logVector("demod_psd", vector_index, psd_est);
-	// 	std::cerr << "Run: gnuplot -e 'set terminal png size 1024,768' ../data/example.gnuplot > ../data/example.png\n";
-	// 	//---------------------------------------------------------------------------
-	// }
 
 	std::vector<float> h2;
 	impulseResponseLPF(IFFS, 16000, num_taps, h2);
@@ -126,20 +60,8 @@ void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK
 	audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
 
 	convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
-	std::cerr << "audio " << *std::max_element(audio.begin(), audio.end()) << std::endl;
 
-	// std::vector<float> mono_data;
-	// mono_data.clear();mono_data.resize(audio.size());
-	//
-	// for(unsigned int k = 0;k<audio.size();k++){
-	// 	if(std::isnan(audio[k])) mono_data[k] = 0;
-	// 	else mono_data[k] = static_cast<short int>(audio[k]*16384);
-	// }
-	// std::cerr << "mono data " << *std::max_element(mono_data.begin(), mono_data.begin()+audio.size()) << std::endl;
-	// std::cerr << "audio size " << audio.size() << std::endl;
-	// std::cerr << "mono data size " << mono_data.size() << std::endl;
-	//
-	// fwrite(&mono_data[0],sizeof(short int),audio.size(),stdout);
+
 	std::vector<short int> mono_data;
 	mono_data.clear();mono_data.resize(audio.size());
 
@@ -147,17 +69,36 @@ void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK
 		if(std::isnan(audio[k])) mono_data[k] = 0;
 		else mono_data[k] = static_cast<short int>(audio[k]*16384);
 	}
-	std::cerr << "mono data " << *std::max_element(mono_data.begin(), mono_data.begin()+audio.size()) << std::endl;
-	std::cerr << "audio size " << audio.size() << std::endl;
-	std::cerr << "mono data size " << mono_data.size() << std::endl;
-
 	fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);
-}
-void monoStereo(std::vector<float> FMDemodData, float RFFS, float IFFS, int BLOCK_SIZE){
-
 
 }
 
+void mono(std::vector<float> FMDemodData, float RFFS, float IFFS, int BLOCK_SIZE){
+
+		// std::vector<float> h2;
+		// impulseResponseLPF(IFFS, 16000, num_taps, h2);
+		//
+		// std::vector<float> audio;
+		// audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
+		//
+		// convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
+		//
+		//
+		// std::vector<short int> mono_data;
+		// mono_data.clear();mono_data.resize(audio.size());
+		//
+		// for(unsigned int k = 0;k<audio.size();k++){
+		// 	if(std::isnan(audio[k])) mono_data[k] = 0;
+		// 	else mono_data[k] = static_cast<short int>(audio[k]*16384);
+		// }
+		// fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);
+
+
+}
+void stereo(std::vector<float> FMDemodData, float RFFS, float IFFS, int BLOCK_SIZE){
+
+
+}
 void RDS(){
 
 }
@@ -233,7 +174,7 @@ int main(int argc, char* argv[])
 			exit(1);
 		}
 		std::cerr << "Read block " << block_id << "\n";
-
+		//std::vector<float> fm_demod;
 		rfFrontEnd(block_data,RFFS,IFFS,BLOCK_SIZE,rf_decim,block_id,i_state,q_state,state,prev_state);
 
 		//mono(block_data,RFFS,IFFS,BLOCK_SIZE);
