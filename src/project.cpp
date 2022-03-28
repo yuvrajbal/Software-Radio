@@ -15,15 +15,12 @@ Ontario, Canada
 #include "logfunc.h"
 #include <cmath>
 #include <algorithm>
-void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK_SIZE,const int rf_decim,unsigned int block_id,	std::vector<float> &i_state,	std::vector<float> &q_state,	std::vector<float> &state,	std::vector<float> &prev_state){
+void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK_SIZE,const int rf_decim,unsigned int block_id,	std::vector<float> &i_state,	std::vector<float> &q_state,std::vector<float> &prev_state,std::vector<float> &fm_demod,const unsigned short int num_taps){
 
 	float Fc = 100000;	//RF cutoff 100Khz
-	unsigned short int num_taps = 101;
 
 	std::vector<float> h;
 	impulseResponseLPF(RFFS, Fc, num_taps, h);
-
-	int mono0Decim = 5;
 
 	std::vector<float> I_block;
 	I_block.clear();I_block.resize(BLOCK_SIZE/2,0.0);
@@ -47,51 +44,32 @@ void rfFrontEnd(std::vector<float> &block_data, float RFFS, float IFFS,int BLOCK
 
 	convolveFIRinBlocks(Q, Q_block, h, q_state, Q_block.size(), rf_decim);
 
-	std::vector<float> fm_demod;
 	fm_demod.clear();fm_demod.resize(I.size(),0.0);
 	// Demod function
 	demod(fm_demod,I,Q,prev_state);
 
-
-	std::vector<float> h2;
-	impulseResponseLPF(IFFS, 16000, num_taps, h2);
-
-	std::vector<float> audio;
-	audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
-
-	convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
-
-
-	std::vector<short int> mono_data;
-	mono_data.clear();mono_data.resize(audio.size());
-
-	for(unsigned int k = 0;k<audio.size();k++){
-		if(std::isnan(audio[k])) mono_data[k] = 0;
-		else mono_data[k] = static_cast<short int>(audio[k]*16384);
-	}
-	fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);
-
 }
 
-void mono(std::vector<float> FMDemodData, float RFFS, float IFFS, int BLOCK_SIZE){
+void mono(std::vector<float> fm_demod, float RFFS, float IFFS, int BLOCK_SIZE,std::vector<float> &state,const unsigned short int num_taps){
 
-		// std::vector<float> h2;
-		// impulseResponseLPF(IFFS, 16000, num_taps, h2);
-		//
-		// std::vector<float> audio;
-		// audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
-		//
-		// convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
-		//
-		//
-		// std::vector<short int> mono_data;
-		// mono_data.clear();mono_data.resize(audio.size());
-		//
-		// for(unsigned int k = 0;k<audio.size();k++){
-		// 	if(std::isnan(audio[k])) mono_data[k] = 0;
-		// 	else mono_data[k] = static_cast<short int>(audio[k]*16384);
-		// }
-		// fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);
+		int mono0Decim = 5;
+		std::vector<float> h2;
+		impulseResponseLPF(IFFS, 16000, num_taps, h2);
+
+		std::vector<float> audio;
+		audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
+
+		convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
+
+
+		std::vector<short int> mono_data;
+		mono_data.clear();mono_data.resize(audio.size());
+
+		for(unsigned int k = 0;k<audio.size();k++){
+			if(std::isnan(audio[k])) mono_data[k] = 0;
+			else mono_data[k] = static_cast<short int>(audio[k]*16384);
+		}
+		fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);
 
 
 }
@@ -146,7 +124,7 @@ int main(int argc, char* argv[])
 	int rf_decim = 10;
 	int audio_decim = 5;
 	int BLOCK_SIZE =  1024 * rf_decim * 2 * audio_decim;
-	int num_taps = 101;
+	unsigned short int num_taps = 101;
 	std::vector<float> i_state;
 	i_state.clear();i_state.resize(num_taps-1,0.0);
 	std::vector<float> q_state;
@@ -155,6 +133,7 @@ int main(int argc, char* argv[])
 	state.clear();state.resize(num_taps-1,0.0);
 	std::vector<float> prev_state;
 	prev_state.clear();prev_state.resize(2,0.0);
+	std::vector<float> fm_demod;
 	// const std::string in_fname = "../data/iq_samples.raw";
 	// std::vector<float> block_data;
 	// for( unsigned int block_id = 0; ; block_id++){
@@ -175,9 +154,9 @@ int main(int argc, char* argv[])
 		}
 		std::cerr << "Read block " << block_id << "\n";
 		//std::vector<float> fm_demod;
-		rfFrontEnd(block_data,RFFS,IFFS,BLOCK_SIZE,rf_decim,block_id,i_state,q_state,state,prev_state);
+		rfFrontEnd(block_data,RFFS,IFFS,BLOCK_SIZE,rf_decim,block_id,i_state,q_state,prev_state,fm_demod,num_taps);
 
-		//mono(block_data,RFFS,IFFS,BLOCK_SIZE);
+		mono(fm_demod,RFFS,IFFS,BLOCK_SIZE,state,num_taps);
 
 		//stereo(block_data,RFFS,IFFS,BLOCK_SIZE);
 
