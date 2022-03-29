@@ -7,6 +7,8 @@ McMaster University
 Ontario, Canada
 */
 
+// run <./data/iq_samples.raw > >(aplay -f S16_LE -r 48000)
+
 #include "dy4.h"
 #include "filter.h"
 #include "fourier.h"
@@ -29,119 +31,140 @@ class demodData{
 	bool read = false;
 };
 
-void updateQueue(std::queue<demodData> &dataQueue){
-	if(dataQueue.front().read){
-		dataQueue.pop();
+void updateQueue(std::queue<demodData> &Queue){
+	if(Queue.front().read){
+		Queue.pop();
 	}
 }
 
-void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_variable &audio_cvar, std::condition_variable &rds_cvar, std::queue<demodData> audioQueue, std::queue<demodData> rdsQueue, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim){
-	//std::vector<float> block_data(BLOCK_SIZE);
+// Why are RFFS and IFFS floats
+
+void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_variable &audio_cvar, std::condition_variable &rds_cvar, std::queue<demodData> &audioQueue, std::queue<demodData> &rdsQueue, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim, unsigned short int num_taps){
+	
+	std::cerr << "Starting FE thread \n";
 
 	float Fc = 100000;	//RF cutoff 100Khz
-	unsigned short int num_taps = 101;
+
+	std::vector<float> i_state;
+	i_state.clear();i_state.resize(num_taps-1,0.0);
+	std::vector<float> q_state;
+	q_state.clear();q_state.resize(num_taps-1,0.0);
+	std::vector<float> fm_demod;
 
 	std::vector<float> h;
 	impulseResponseLPF(RFFS, Fc, num_taps, h);
 
-	//int numDecim = RFFS/IFFS;
-	int mono0Decim = 5;
-
 	std::vector<float> I_block;
-	I_block.clear();I_block.resize(block_data.size()/2,0.0);
+	I_block.clear();I_block.resize(BLOCK_SIZE/2,0.0);
 	std::vector<float> Q_block;
-	Q_block.clear();Q_block.resize(block_data.size()/2,0.0);
-	std::vector<float> i_state(num_taps-1);
-	std::vector<float> q_state(num_taps-1);
-	std::vector<float> state(num_taps-1);
-	std::vector<float> prev_state(2);
+	Q_block.clear();Q_block.resize(BLOCK_SIZE/2,0.0);
+	std::vector<float> prev_state;
+	prev_state.clear();prev_state.resize(2,0.0);
+	std::vector<float> block_data(BLOCK_SIZE);
+	
+	// Repeated read from stdin and writing to Queues
 
-	split_audio_into_channels(block_data, I_block, Q_block);
+	for(unsigned int block_id = 0; ; block_id++){
 
-	//I_block = slice(I_data, block_count*BLOCK_SIZE, (block_count + 1)*BLOCK_SIZE);
-	//Q_block = slice(Q_data, block_count*BLOCK_SIZE, (block_count + 1)*BLOCK_SIZE);
+		// Read from stdin
 
-	//Might have to change to filter single block
-	std::vector<float> I;
-	I.clear();I.resize(I_block.size()/rf_decim,0.0);
-	std::vector<float> Q;
-	Q.clear();Q.resize(Q_block.size()/rf_decim,0.0);
+		readStdinBlockData(BLOCK_SIZE, block_id, block_data);
+		if ((std::cin.rdstate()) != 0) {
+			std::cerr << "End of input stream reached" << "\n";
+			exit(1);
+		}
+		std::cerr << "Read block " << block_id << "\n";
 
-	convolveFIRinBlocks(I, I_block, h, i_state, BLOCK_SIZE/2, rf_decim);
+		// Demodulate
 
-	convolveFIRinBlocks(Q, Q_block, h, q_state, BLOCK_SIZE/2, rf_decim);
+		// Splits the data into I and Q samples
+		for(int k = 0;k<BLOCK_SIZE/2;k++){
+			I_block[k] = block_data[k*2];
+			Q_block[k] = block_data[1+k*2];
+		}
 
-	std::vector<float> fm_demod;
-	fm_demod.clear();fm_demod.resize(I.size(),0.0);
+		std::vector<float> I;
+		I.clear();I.resize(I_block.size()/rf_decim,0.0);
+		std::vector<float> Q;
+		Q.clear();Q.resize(Q_block.size()/rf_decim,0.0);
 
-	demod(fm_demod,I,Q,prev_state);
+		convolveFIRinBlocks(I, I_block, h, i_state, BLOCK_SIZE/2, rf_decim);
 
-	std::vector<float> h2;
-	impulseResponseLPF(IFFS, 16000, num_taps, h2);
+		convolveFIRinBlocks(Q, Q_block, h, q_state, BLOCK_SIZE/2, rf_decim);
 
+		fm_demod.clear();fm_demod.resize(I.size(),0.0);
 
-	std::vector<float> audio;
-	audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
+		demod(fm_demod,I,Q,prev_state);
 
-	convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
+		//Figure out what goes where
 
-	std::vector<float> mono_data;
-	mono_data.clear();mono_data.resize(I_block.size()/mono0Decim);
+		//Critical section
 
-	for(unsigned int k = 0;k<audio.size();k++){
-		if(std::isnan(audio[k])) mono_data[k] = 0;
-		else mono_data[k] = static_cast<short int>(audio[k]*16384);
+		//RDS CURRENTLY COMMENTED OUT
+
+		std::unique_lock<std::mutex> audio_lock(audio_mutex);
+		//std::unique_lock<std::mutex> rds_lock(rds_mutex);
+		//Lock if either queue is full
+		//while((audioQueue.size() > 10)||(rdsQueue.size() > 10)){
+		while(audioQueue.size() > 10){
+			rds_cvar.wait(audio_lock);
+			//rds_cvar.wait(rds_lock);			
+		}
+		std::cerr << "pushing block " << block_id << " \n";
+		audioQueue.push(demodData(fm_demod));
+		//rdsQueue.push(demodData(fm_demod));
+		audio_lock.unlock();
+		//rds_lock.unlock();
+
+		//Critical section ends
 	}
-	//std::cerr << "output";
-	fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);
-
-	//Figure out what goes where
-
-	//Critical section
-	std::unique_lock<std::mutex> my_lock(my_mutex);
-	dataQueue.push(demodData(fm_demod));
-	my_lock.unlock();
-
-	//Critical section ends
-
 }
-void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, std::queue<demodData> audioQueue, float RFFS, float IFFS, int BLOCK_SIZE){
 
-	//Read from queue first
-	//Critical section
-	std::unique_lock<std::mutex> my_lock(audio_mutex);
-	while(audioQueue.empty()){
-		audio_cvar.wait(my_lock);
-	}
-	if(!(audioQueue.front()).read){
-		std::vector<float> block = (audioQueue.front()).block;
+void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, std::queue<demodData> audioQueue, float RFFS, float IFFS, int BLOCK_SIZE, unsigned short int num_taps){
+
+	std::cerr << "starting audiothread \n";
+
+	// Is there a better condition to use?
+	int mono0Decim = 5;
+	std::vector<float> state;
+	state.clear();state.resize(num_taps-1,0.0);
+
+	
+	while(true){
+
+		//Read from queue first
+		//Critical section
+		std::unique_lock<std::mutex> my_lock(audio_mutex);
+		while(audioQueue.empty()){
+			audio_cvar.wait(my_lock);
+		}
+		std::cerr << "reading block\n";
+		std::vector<float> fm_demod = (audioQueue.front()).block;
 		(audioQueue.front()).read = true;
 		updateQueue(audioQueue);
+		my_lock.unlock();
+
+		//Critical section ends
+		//Process data after
+
+		std::vector<float> h2;
+		impulseResponseLPF(IFFS, 16000, num_taps, h2);
+
+		std::vector<float> audio;
+		audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
+
+		convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
+
+
+		std::vector<short int> mono_data;
+		mono_data.clear();mono_data.resize(audio.size());
+
+		for(unsigned int k = 0;k<audio.size();k++){
+			if(std::isnan(audio[k])) mono_data[k] = 0;
+			else mono_data[k] = static_cast<short int>(audio[k]*16384);
+		}
+		fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);	
 	}
-	my_lock.unlock();
-
-	//Critical section ends
-	//Process data after
-
-	int mono0Decim = 5;
-	std::vector<float> h2;
-	impulseResponseLPF(IFFS, 16000, num_taps, h2);
-
-	std::vector<float> audio;
-	audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
-
-	convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
-
-
-	std::vector<short int> mono_data;
-	mono_data.clear();mono_data.resize(audio.size());
-
-	for(unsigned int k = 0;k<audio.size();k++){
-		if(std::isnan(audio[k])) mono_data[k] = 0;
-		else mono_data[k] = static_cast<short int>(audio[k]*16384);
-	}
-	fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);	
-
 }
 
 void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<demodData> &rdsQueue){
@@ -152,11 +175,9 @@ void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<de
 	while(rdsQueue.empty()){
 		rds_cvar.wait(my_lock);
 	}
-	if(!(rdsQueue.front()).read){
-		std::vector<float> block = (rdsQueue.front()).block;
-		(rdsQueue.front()).read = true;
-		updateQueue(rdsQueue);
-	}
+	std::vector<float> block = (rdsQueue.front()).block;
+	(rdsQueue.front()).read = true;
+	updateQueue(rdsQueue);
 	my_lock.unlock();
 
 	//critical section ends
@@ -180,32 +201,32 @@ int main(int argc, char* argv[])
 		std::cerr << " Exiting now\n";
 		exit(1);
 	}
+	float RFFS, IFFS, audioFS;
 	if(mode == 0){
-		float RFFS = 2400000;
-		float IFFS = 240000;
-		float audioFS = 48000;
+		RFFS = 2400000;
+		IFFS = 240000;
+		audioFS = 48000;
 	}
 	if(mode == 1){
-		float RFFS = 1152000;
-		float IFFS = 288000;
-		float audioFS = 48000;
+		RFFS = 1152000;
+		IFFS = 288000;
+		audioFS = 48000;
 	}
 	if(mode == 2){
-		float RFFS = 2400000;
-		float IFFS = 240000;
-		float audioFS = 44100;
+		RFFS = 2400000;
+		IFFS = 240000;
+		audioFS = 44100;
 	}
 	if(mode == 3){
-		float RFFS = 1920000;
-		float IFFS = 320000;
-		float audioFS = 44100;
+		RFFS = 1920000;
+		IFFS = 320000;
+		audioFS = 44100;
 	}
-	float RFFS = 2400000;
-	float IFFS = 240000;
-	float audioFS = 48000;
+
 	int rf_decim = 10;
 	int audio_decim = 5;
 	int BLOCK_SIZE =  1024 * rf_decim * 2 * audio_decim;
+	unsigned short int num_taps = 101;
 
 	//Suggested to use 2 separate queues for separate threads
 	std::queue<demodData> audioQueue;
@@ -215,13 +236,13 @@ int main(int argc, char* argv[])
 	std::condition_variable audio_cvar;
 	std::condition_variable rds_cvar;
 
-	std::thread tFrontEnd = std::thread(rfFrontEnd, 'a', std::ref(audio_mutex), std::ref(rds_mutex), std::ref(audio_cvar), std::ref(rds_cvar), std::ref(audioQueue), std::ref(rdsQueue), RFFS, IFFS, BLOCK_SIZE, rf_decim);
-	std::thread tMonoStereo = std::thread(monoStereo, 'b', std::ref(audio_mutex), std::ref(audio_cvar), std::ref(audioQueue));
-	std::thread tRDS = std::thread(RDS, 'c', std::ref(rds_mutex), std::ref(rds_cvar), std::ref(rdsQueue));
+	std::thread tFrontEnd = std::thread(rfFrontEnd, std::ref(audio_mutex), std::ref(rds_mutex), std::ref(audio_cvar), std::ref(rds_cvar), std::ref(audioQueue), std::ref(rdsQueue), RFFS, IFFS, BLOCK_SIZE, rf_decim, num_taps);
+	std::thread tMonoStereo = std::thread(monoStereo, std::ref(audio_mutex), std::ref(audio_cvar), std::ref(audioQueue), RFFS, IFFS, BLOCK_SIZE, num_taps);
+	//std::thread tRDS = std::thread(RDS, 'c', std::ref(rds_mutex), std::ref(rds_cvar), std::ref(rdsQueue));
 
 	tFrontEnd.join();
 	tMonoStereo.join();
-	tRDS.join();
+	//tRDS.join();
 
 	return 0;
 }
