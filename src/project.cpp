@@ -20,22 +20,22 @@ Ontario, Canada
 #include <queue>
 #include <condition_variable>
 
+#define QUEUE_LENGTH 10
 
 class demodData{
 	public:
 	demodData(std::vector<float> val){block = val;}
 	std::vector<float> block;
-	bool monoRead = false;
-	bool RDSRead = false;
+	bool read = false;
 };
 
 void updateQueue(std::queue<demodData> &dataQueue){
-	if((dataQueue.front().monoRead) && (dataQueue.front().RDSRead)){
+	if(dataQueue.front().read){
 		dataQueue.pop();
 	}
 }
 
-void rfFrontEnd(std::mutex &my_mutex, std::condition_variable &my_cvar, std::queue<demodData> dataQueue, std::queue<demodData> &block_data, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim){
+void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_variable &audio_cvar, std::condition_variable &rds_cvar, std::queue<demodData> audioQueue, std::queue<demodData> rdsQueue, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim){
 	//std::vector<float> block_data(BLOCK_SIZE);
 
 	float Fc = 100000;	//RF cutoff 100Khz
@@ -105,38 +105,57 @@ void rfFrontEnd(std::mutex &my_mutex, std::condition_variable &my_cvar, std::que
 	//Critical section ends
 
 }
-void monoStereo(std::mutex &my_mutex, std::condition_variable &my_cvar, std::queue<demodData> dataQueue, float RFFS, float IFFS, int BLOCK_SIZE){
+void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, std::queue<demodData> audioQueue, float RFFS, float IFFS, int BLOCK_SIZE){
 
 	//Read from queue first
 	//Critical section
-	std::unique_lock<std::mutex> my_lock(my_mutex);
-	while(dataQueue.empty()){
-		my_cvar.wait(my_lock);
+	std::unique_lock<std::mutex> my_lock(audio_mutex);
+	while(audioQueue.empty()){
+		audio_cvar.wait(my_lock);
 	}
-	if(!(dataQueue.front()).monoRead){
-		std::vector<float> block = (dataQueue.front()).block;
-		(dataQueue.front()).monoRead = true;
-		updateQueue(dataQueue);
+	if(!(audioQueue.front()).read){
+		std::vector<float> block = (audioQueue.front()).block;
+		(audioQueue.front()).read = true;
+		updateQueue(audioQueue);
 	}
 	my_lock.unlock();
 
 	//Critical section ends
 	//Process data after
 
+	int mono0Decim = 5;
+	std::vector<float> h2;
+	impulseResponseLPF(IFFS, 16000, num_taps, h2);
+
+	std::vector<float> audio;
+	audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
+
+	convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
+
+
+	std::vector<short int> mono_data;
+	mono_data.clear();mono_data.resize(audio.size());
+
+	for(unsigned int k = 0;k<audio.size();k++){
+		if(std::isnan(audio[k])) mono_data[k] = 0;
+		else mono_data[k] = static_cast<short int>(audio[k]*16384);
+	}
+	fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);	
+
 }
 
-void RDS(std::mutex &my_mutex, std::condition_variable &my_cvar, std::queue<demodData> &dataQueue){
+void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<demodData> &rdsQueue){
 	
 	//Read from queue first
 	//Critical section
-	std::unique_lock<std::mutex> my_lock(my_mutex);
-	while(dataQueue.empty()){
-		my_cvar.wait(my_lock);
+	std::unique_lock<std::mutex> my_lock(rds_mutex);
+	while(rdsQueue.empty()){
+		rds_cvar.wait(my_lock);
 	}
-	if(!(dataQueue.front()).RDSRead){
-		std::vector<float> block = (dataQueue.front()).block;
-		(dataQueue.front()).RDSRead = true;
-		updateQueue(dataQueue);
+	if(!(rdsQueue.front()).read){
+		std::vector<float> block = (rdsQueue.front()).block;
+		(rdsQueue.front()).read = true;
+		updateQueue(rdsQueue);
 	}
 	my_lock.unlock();
 
@@ -188,46 +207,17 @@ int main(int argc, char* argv[])
 	int audio_decim = 5;
 	int BLOCK_SIZE =  1024 * rf_decim * 2 * audio_decim;
 
-	// const std::string in_fname = "../data/iq_samples.raw";
-	// std::vector<float> block_data;
-	// for( unsigned int block_id = 0; ; block_id++){
-	// 	std::vector<float> block_data(BLOCK_SIZE);
-	// 	readStdinBlockData(BLOCK_SIZE, block_id, block_data);
-	// 	if ((std::cin.rdstate()) != 0) {
-	// 		std::cerr << "End of input stream reached" << "\n";
-	// 		exit(1);
-	// 	}
-	// 	std::cerr << "Read block" << block_id << "\n";
-	// }
+	//Suggested to use 2 separate queues for separate threads
+	std::queue<demodData> audioQueue;
+	std::queue<demodData> rdsQueue;
+	std::mutex audio_mutex;
+	std::mutex rds_mutex;
+	std::condition_variable audio_cvar;
+	std::condition_variable rds_cvar;
 
-	/*
-	for( unsigned int block_id = 0; ; block_id++){
-		std::vector<float> block_data(BLOCK_SIZE);
-		readStdinBlockData(BLOCK_SIZE, block_id, block_data);
-		if ((std::cin.rdstate()) != 0) {
-			std::cerr << "End of input stream reached" << "\n";
-			exit(1);
-		}
-		std::cerr << "Read block " << block_id << "\n";
-
-		rfFrontEnd(block_data,RFFS,IFFS,BLOCK_SIZE,rf_decim);
-
-		//mono(block_data,RFFS,IFFS,BLOCK_SIZE);
-
-		//stereo(block_data,RFFS,IFFS,BLOCK_SIZE);
-
-		//RDS();
-
-	}
-	*/
-
-	std::queue<demodData> dataQueue;
-	std::mutex my_mutex;
-	std::condition_variable my_cvar;
-
-	std::thread tFrontEnd = std::thread(rfFrontEnd, 'a', std::ref(my_mutex), std::ref(my_cvar), std::ref(dataQueue));
-	std::thread tMonoStereo = std::thread(monoStereo, 'b', std::ref(my_mutex), std::ref(my_cvar), std::ref(dataQueue));
-	std::thread tRDS = std::thread(RDS, 'c', std::ref(my_mutex), std::ref(my_cvar), std::ref(dataQueue));
+	std::thread tFrontEnd = std::thread(rfFrontEnd, 'a', std::ref(audio_mutex), std::ref(rds_mutex), std::ref(audio_cvar), std::ref(rds_cvar), std::ref(audioQueue), std::ref(rdsQueue), RFFS, IFFS, BLOCK_SIZE, rf_decim);
+	std::thread tMonoStereo = std::thread(monoStereo, 'b', std::ref(audio_mutex), std::ref(audio_cvar), std::ref(audioQueue));
+	std::thread tRDS = std::thread(RDS, 'c', std::ref(rds_mutex), std::ref(rds_cvar), std::ref(rdsQueue));
 
 	tFrontEnd.join();
 	tMonoStereo.join();
