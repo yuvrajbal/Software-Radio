@@ -73,7 +73,7 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 			std::cerr << "End of input stream reached" << "\n";
 			exit(1);
 		}
-		std::cerr << "Read block " << block_id << "\n";
+		//std::cerr << "Read block " << block_id << "\n";
 
 		// Demodulate
 
@@ -106,13 +106,16 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 		//std::unique_lock<std::mutex> rds_lock(rds_mutex);
 		//Lock if either queue is full
 		//while((audioQueue.size() > 10)||(rdsQueue.size() > 10)){
-		while(audioQueue.size() > 10){
-			rds_cvar.wait(audio_lock);
+		while(audioQueue.size() >= 10){			
+			std::cerr << "Waiting, Queue Full " << audioQueue.size() << "\n";
+			audio_cvar.wait(audio_lock);
 			//rds_cvar.wait(rds_lock);			
 		}
 		std::cerr << "pushing block " << block_id << " \n";
 		audioQueue.push(demodData(fm_demod));
 		//rdsQueue.push(demodData(fm_demod));
+		audio_cvar.notify_one();
+		//rds_cvar.notify_one();
 		audio_lock.unlock();
 		//rds_lock.unlock();
 
@@ -120,7 +123,7 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 	}
 }
 
-void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, std::queue<demodData> audioQueue, float RFFS, float IFFS, int BLOCK_SIZE, unsigned short int num_taps){
+void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, std::queue<demodData> &audioQueue, float RFFS, float IFFS, int BLOCK_SIZE, unsigned short int num_taps){
 
 	std::cerr << "starting audiothread \n";
 
@@ -134,15 +137,17 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 
 		//Read from queue first
 		//Critical section
-		std::unique_lock<std::mutex> my_lock(audio_mutex);
+		std::unique_lock<std::mutex> audio_lock(audio_mutex);
 		while(audioQueue.empty()){
-			audio_cvar.wait(my_lock);
+			std::cerr << "Waiting, Queue Empty " << audioQueue.size() << "\n";
+			audio_cvar.wait(audio_lock);
 		}
 		std::cerr << "reading block\n";
 		std::vector<float> fm_demod = (audioQueue.front()).block;
-		(audioQueue.front()).read = true;
-		updateQueue(audioQueue);
-		my_lock.unlock();
+		audioQueue.pop();
+		audio_cvar.notify_one();
+		audio_lock.unlock();
+		std::cerr << "popped block\n";
 
 		//Critical section ends
 		//Process data after
@@ -243,6 +248,8 @@ int main(int argc, char* argv[])
 	tFrontEnd.join();
 	tMonoStereo.join();
 	//tRDS.join();
+
+	std::cerr << "threads joined \n";
 
 	return 0;
 }
