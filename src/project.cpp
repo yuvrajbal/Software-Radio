@@ -88,21 +88,24 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 		//RDS CURRENTLY COMMENTED OUT
 
 		std::unique_lock<std::mutex> audio_lock(audio_mutex);
-		//std::unique_lock<std::mutex> rds_lock(rds_mutex);
+		std::unique_lock<std::mutex> rds_lock(rds_mutex);
 		//Lock if either queue is full
 		//while((audioQueue.size() > 10)||(rdsQueue.size() > 10)){
-		if(audioQueue.size() >= 10){			
-			std::cerr << "Waiting, Queue Full " << audioQueue.size() << "\n";
+		if((audioQueue.size() >= QUEUE_LENGTH)){			
+			std::cerr << "Waiting, AudioQueue Full " << audioQueue.size() << "\n";
 			audio_cvar.wait(audio_lock);
-			//rds_cvar.wait(rds_lock);			
+		}
+		if((rdsQueue.size() >= QUEUE_LENGTH)){			
+			std::cerr << "Waiting, RDSQueue Full " << rdsQueue.size() << "\n";
+			rds_cvar.wait(rds_lock);
 		}
 		std::cerr << "pushing block " << block_id << " \n";
 		audioQueue.push(fm_demod);
-		//rdsQueue.push(demodData(fm_demod));
+		rdsQueue.push(fm_demod);
 		audio_lock.unlock();
-		//rds_lock.unlock();
+		rds_lock.unlock();
 		audio_cvar.notify_one();
-		//rds_cvar.notify_one();
+		rds_cvar.notify_one();
 		//Critical section ends
 	}
 }
@@ -121,13 +124,14 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 	std::vector<short int> mono_data;
 	std::vector<float> fm_demod;
 
+
 	while(true){
 
 		//Read from queue first
 		//Critical section
 		std::unique_lock<std::mutex> audio_lock(audio_mutex);
 		if(audioQueue.empty()){
-			std::cerr << "Waiting, Queue Empty " << audioQueue.size() << "\n";
+			std::cerr << "Waiting, AudioQueue Empty " << audioQueue.size() << "\n";
 			audio_cvar.wait(audio_lock);
 		}
 		std::cerr << "reading block\n";
@@ -158,18 +162,26 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 
 void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<std::vector<float>> &rdsQueue){
 	
-	//Read from queue first
-	//Critical section
-	std::unique_lock<std::mutex> my_lock(rds_mutex);
-	while(rdsQueue.empty()){
-		rds_cvar.wait(my_lock);
-	}
-	std::vector<float> block = (rdsQueue.front());
-	rdsQueue.pop();
-	my_lock.unlock();
+	std::cerr << "starting rds thread\n";
 
-	//critical section ends
-	//Process data after
+	while(true){
+
+		//Read from queue first
+		//Critical section
+		std::unique_lock<std::mutex> rds_lock(rds_mutex);
+		while(rdsQueue.empty()){
+			std::cerr << "Waiting, RDSQueue Empty " << rdsQueue.size() << "\n";
+			rds_cvar.wait(rds_lock);
+		}
+		std::vector<float> block = (rdsQueue.front());
+		rdsQueue.pop();
+		rds_lock.unlock();
+
+		//critical section ends
+		//Process data after
+
+		std::cerr << "foo\n";
+	}
 }
 
 int main(int argc, char* argv[])
@@ -226,11 +238,11 @@ int main(int argc, char* argv[])
 
 	std::thread tFrontEnd = std::thread(rfFrontEnd, std::ref(audio_mutex), std::ref(rds_mutex), std::ref(audio_cvar), std::ref(rds_cvar), std::ref(audioQueue), std::ref(rdsQueue), RFFS, IFFS, BLOCK_SIZE, rf_decim, num_taps);
 	std::thread tMonoStereo = std::thread(monoStereo, std::ref(audio_mutex), std::ref(audio_cvar), std::ref(audioQueue), RFFS, IFFS, BLOCK_SIZE, num_taps);
-	//std::thread tRDS = std::thread(RDS, 'c', std::ref(rds_mutex), std::ref(rds_cvar), std::ref(rdsQueue));
+	std::thread tRDS = std::thread(RDS, std::ref(rds_mutex), std::ref(rds_cvar), std::ref(rdsQueue));
 
 	tFrontEnd.join();
 	tMonoStereo.join();
-	//tRDS.join();
+	tRDS.join();
 
 	std::cerr << "threads joined \n";
 
