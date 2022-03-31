@@ -31,11 +31,13 @@ class demodData{
 	bool read = false;
 };
 
+/*
 void updateQueue(std::queue<demodData> &Queue){
 	if(Queue.front().read){
 		Queue.pop();
 	}
 }
+*/
 
 // Why are RFFS and IFFS floats
 
@@ -61,7 +63,11 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 	std::vector<float> prev_state;
 	prev_state.clear();prev_state.resize(2,0.0);
 	std::vector<float> block_data(BLOCK_SIZE);
-	
+	std::vector<float> I;
+	I.clear();I.resize(I_block.size()/rf_decim,0.0);
+	std::vector<float> Q;
+	Q.clear();Q.resize(Q_block.size()/rf_decim,0.0);
+
 	// Repeated read from stdin and writing to Queues
 
 	for(unsigned int block_id = 0; ; block_id++){
@@ -83,10 +89,6 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 			Q_block[k] = block_data[1+k*2];
 		}
 
-		std::vector<float> I;
-		I.clear();I.resize(I_block.size()/rf_decim,0.0);
-		std::vector<float> Q;
-		Q.clear();Q.resize(Q_block.size()/rf_decim,0.0);
 
 		convolveFIRinBlocks(I, I_block, h, i_state, BLOCK_SIZE/2, rf_decim);
 
@@ -95,7 +97,7 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 		fm_demod.clear();fm_demod.resize(I.size(),0.0);
 
 		demod(fm_demod,I,Q,prev_state);
-
+ 
 		//Figure out what goes where
 
 		//Critical section
@@ -106,7 +108,7 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 		//std::unique_lock<std::mutex> rds_lock(rds_mutex);
 		//Lock if either queue is full
 		//while((audioQueue.size() > 10)||(rdsQueue.size() > 10)){
-		while(audioQueue.size() >= 10){			
+		if(audioQueue.size() >= 10){			
 			std::cerr << "Waiting, Queue Full " << audioQueue.size() << "\n";
 			audio_cvar.wait(audio_lock);
 			//rds_cvar.wait(rds_lock);			
@@ -114,11 +116,10 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 		std::cerr << "pushing block " << block_id << " \n";
 		audioQueue.push(demodData(fm_demod));
 		//rdsQueue.push(demodData(fm_demod));
-		audio_cvar.notify_one();
-		//rds_cvar.notify_one();
 		audio_lock.unlock();
 		//rds_lock.unlock();
-
+		audio_cvar.notify_one();
+		//rds_cvar.notify_one();
 		//Critical section ends
 	}
 }
@@ -132,38 +133,38 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 	std::vector<float> state;
 	state.clear();state.resize(num_taps-1,0.0);
 
-	
+	std::vector<float> h2;
+	std::vector<float> audio;
+	std::vector<short int> mono_data;
+	std::vector<float> fm_demod;
+
 	while(true){
 
 		//Read from queue first
 		//Critical section
 		std::unique_lock<std::mutex> audio_lock(audio_mutex);
-		while(audioQueue.empty()){
+		if(audioQueue.empty()){
 			std::cerr << "Waiting, Queue Empty " << audioQueue.size() << "\n";
 			audio_cvar.wait(audio_lock);
 		}
 		std::cerr << "reading block\n";
-		std::vector<float> fm_demod = (audioQueue.front()).block;
+		fm_demod = audioQueue.front().block;
 		audioQueue.pop();
-		audio_cvar.notify_one();
 		audio_lock.unlock();
+		audio_cvar.notify_one();
 		std::cerr << "popped block\n";
 
 		//Critical section ends
 		//Process data after
 
-		std::vector<float> h2;
 		impulseResponseLPF(IFFS, 16000, num_taps, h2);
-
-		std::vector<float> audio;
-		audio.clear();audio.resize(fm_demod.size()/mono0Decim,0.0);
+		
+		audio.clear();audio.resize(BLOCK_SIZE/mono0Decim,0.0);
 
 		convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
-
-
-		std::vector<short int> mono_data;
+		
 		mono_data.clear();mono_data.resize(audio.size());
-
+		
 		for(unsigned int k = 0;k<audio.size();k++){
 			if(std::isnan(audio[k])) mono_data[k] = 0;
 			else mono_data[k] = static_cast<short int>(audio[k]*16384);
@@ -181,8 +182,7 @@ void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<de
 		rds_cvar.wait(my_lock);
 	}
 	std::vector<float> block = (rdsQueue.front()).block;
-	(rdsQueue.front()).read = true;
-	updateQueue(rdsQueue);
+	rdsQueue.pop();
 	my_lock.unlock();
 
 	//critical section ends
