@@ -24,24 +24,7 @@ Ontario, Canada
 
 #define QUEUE_LENGTH 10
 
-class demodData{
-	public:
-	demodData(std::vector<float> val){block = val;}
-	std::vector<float> block;
-	bool read = false;
-};
-
-/*
-void updateQueue(std::queue<demodData> &Queue){
-	if(Queue.front().read){
-		Queue.pop();
-	}
-}
-*/
-
-// Why are RFFS and IFFS floats
-
-void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_variable &audio_cvar, std::condition_variable &rds_cvar, std::queue<demodData> &audioQueue, std::queue<demodData> &rdsQueue, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim, unsigned short int num_taps){
+void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_variable &audio_cvar, std::condition_variable &rds_cvar, std::queue<std::vector<float>> &audioQueue, std::queue<std::vector<float>> &rdsQueue, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim, unsigned short int num_taps){
 	
 	std::cerr << "Starting FE thread \n";
 
@@ -114,7 +97,7 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 			//rds_cvar.wait(rds_lock);			
 		}
 		std::cerr << "pushing block " << block_id << " \n";
-		audioQueue.push(demodData(fm_demod));
+		audioQueue.push(fm_demod);
 		//rdsQueue.push(demodData(fm_demod));
 		audio_lock.unlock();
 		//rds_lock.unlock();
@@ -124,7 +107,7 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 	}
 }
 
-void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, std::queue<demodData> &audioQueue, float RFFS, float IFFS, int BLOCK_SIZE, unsigned short int num_taps){
+void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, std::queue<std::vector<float>> &audioQueue, float RFFS, float IFFS, int BLOCK_SIZE, unsigned short int num_taps){
 
 	std::cerr << "starting audiothread \n";
 
@@ -148,7 +131,7 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 			audio_cvar.wait(audio_lock);
 		}
 		std::cerr << "reading block\n";
-		fm_demod = audioQueue.front().block;
+		fm_demod = audioQueue.front();
 		audioQueue.pop();
 		audio_lock.unlock();
 		audio_cvar.notify_one();
@@ -173,7 +156,7 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 	}
 }
 
-void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<demodData> &rdsQueue){
+void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<std::vector<float>> &rdsQueue){
 	
 	//Read from queue first
 	//Critical section
@@ -181,7 +164,7 @@ void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<de
 	while(rdsQueue.empty()){
 		rds_cvar.wait(my_lock);
 	}
-	std::vector<float> block = (rdsQueue.front()).block;
+	std::vector<float> block = (rdsQueue.front());
 	rdsQueue.pop();
 	my_lock.unlock();
 
@@ -234,8 +217,8 @@ int main(int argc, char* argv[])
 	unsigned short int num_taps = 101;
 
 	//Suggested to use 2 separate queues for separate threads
-	std::queue<demodData> audioQueue;
-	std::queue<demodData> rdsQueue;
+	std::queue<std::vector<float>> audioQueue;
+	std::queue<std::vector<float>> rdsQueue;
 	std::mutex audio_mutex;
 	std::mutex rds_mutex;
 	std::condition_variable audio_cvar;
