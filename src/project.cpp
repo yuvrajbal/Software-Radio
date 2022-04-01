@@ -24,7 +24,7 @@ Ontario, Canada
 
 #define QUEUE_LENGTH 10
 
-void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_variable &audio_cvar, std::condition_variable &rds_cvar, std::queue<std::vector<float>> &audioQueue, std::queue<std::vector<float>> &rdsQueue, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim, unsigned short int num_taps){
+void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_variable &audio_cvar, std::condition_variable &rds_cvar, std::queue<std::vector<float>> &audioQueue, std::queue<std::vector<float>> &rdsQueue, float RFFS, float IFFS,int BLOCK_SIZE,int rf_decim, unsigned short int num_taps, int US, int audio_decim){
 	
 	std::cerr << "Starting FE thread \n";
 
@@ -110,21 +110,51 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 	}
 }
 
-void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, std::queue<std::vector<float>> &audioQueue, float RFFS, float IFFS, int BLOCK_SIZE, unsigned short int num_taps){
+void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, std::queue<std::vector<float>> &audioQueue, float RFFS, float IFFS, int BLOCK_SIZE, unsigned short int num_taps, int US, int audio_decim){
 
 	std::cerr << "starting audiothread \n";
 
-	// Is there a better condition to use?
 	int mono0Decim = 5;
 	std::vector<float> state;
 	state.clear();state.resize(num_taps-1,0.0);
 
 	std::vector<float> h2;
 	std::vector<float> audio;
-	std::vector<short int> mono_data;
+	std::vector<float> mono_data;	
+	std::vector<float> demod_us;
 	std::vector<float> fm_demod;
+	std::vector<float> prev_pll;
+	prev_pll.clear();prev_pll.resize(6,0.0);
+	prev_pll[0] = 0;
+	prev_pll[1] = 0;
+	prev_pll[2] = 1;
+	prev_pll[3] = 0;
+	prev_pll[4] = 1;
+	prev_pll[5] = 0;
 
-
+	// For stereo
+	std::vector<float> hCarrier;
+	std::vector<float> hChannel;
+	float Fs = IFFS;
+	float FbCarrier = 18500;
+	float FeCarrier = 19500;
+	float FbChannel = 22000;
+	float FeChannel = 54000;
+	std::vector<float> ncoOut;
+	float freq = 19000;
+	std::vector<float> mixer;
+	mixer.clear(); mixer.resize(hChannel.size());
+	std::vector<float> stereo_data;
+	std::vector<float> left_stereo;
+	std::vector<float> right_stereo;
+	left_stereo.clear(); left_stereo.resize(stereo_data.size());
+	right_stereo.clear(); right_stereo.resize(stereo_data.size());
+	impulseResponseLPFUS(IFFS, 16000, num_taps, h2,US);
+	
+	for(int i = 0;i<h2.size();i++){
+		h2[i] = h2[i]*US;
+	}
+	
 	while(true){
 
 		//Read from queue first
@@ -144,25 +174,49 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 		//Critical section ends
 		//Process data after
 
-		impulseResponseLPF(IFFS, 16000, num_taps, h2);
-		
-		audio.clear();audio.resize(BLOCK_SIZE/mono0Decim,0.0);
+		upsample(demod_us,fm_demod,US);
 
-		convolveFIRinBlocks(audio,fm_demod,h2,state,fm_demod.size(),mono0Decim);
-		
-		mono_data.clear();mono_data.resize(audio.size());
-		
-		for(unsigned int k = 0;k<audio.size();k++){
-			if(std::isnan(audio[k])) mono_data[k] = 0;
-			else mono_data[k] = static_cast<short int>(audio[k]*16384);
+		mono_data.clear();mono_data.resize(demod_us.size()/audio_decim,0.0);
+		mono_data.resize((fm_demod.size()*US)/audio_decim,0.0);
+		convolveFIRinBlocks(mono_data,demod_us,h2,state,demod_us.size(),audio_decim);
+
+		// STEREO
+		impulseResponseBPF(hCarrier,FbCarrier,FeCarrier,Fs,num_taps);
+
+		impulseResponseBPF(hChannel,FbChannel,FeChannel,Fs,num_taps);
+
+		// PLL
+		fmPll(ncoOut,hCarrier,freq,Fs, 1.0, 0.0, 0.01, prev_pll);
+
+		// NCO
+		for(int i = 0;i<ncoOut.size();i++){
+			ncoOut[i] = ncoOut[i]*2;
 		}
-		fwrite(&mono_data[0],sizeof(short int),mono_data.size(),stdout);	
+
+		// Mixer
+		for(int k = 0;k<mixer.size();k++){
+			mixer[k] = hChannel[k]*ncoOut[k];
+		}
+
+		std::vector<short int> mono_output;
+		mono_output.clear();mono_output.resize(mono_data.size());
+		for(unsigned int k = 0;k<mono_data.size();k++){
+			if(std::isnan(mono_data[k])) mono_output[k] = 0;
+			else mono_output[k] = static_cast<short int>(mono_data[k]*16384);
+		}
+		fwrite(&mono_output[0],sizeof(short int),mono_output.size(),stdout);	
 	}
 }
 
-void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<std::vector<float>> &rdsQueue){
+void RDS(std::mutex &rds_mutex, std::condition_variable &rds_cvar, std::queue<std::vector<float>> &rdsQueue, float RFFS, float IFFS, int BLOCK_SIZE, unsigned short int num_taps, int US, int audio_decim){
 	
 	std::cerr << "starting rds thread\n";
+
+	std::vector<float> h;
+	float Fs = IFFS;
+	float Fb = 54000;
+	float Fe = 60000;
+	impulseResponseBPF(h,Fb,Fe,Fs,num_taps);
 
 	while(true){
 
@@ -202,29 +256,37 @@ int main(int argc, char* argv[])
 		exit(1);
 	}
 	float RFFS, IFFS, audioFS;
+	int US, audio_decim;
 	if(mode == 0){
 		RFFS = 2400000;
 		IFFS = 240000;
 		audioFS = 48000;
+		US = 1;
+		audio_decim = 5;
 	}
-	if(mode == 1){
+	else if(mode == 1){
 		RFFS = 1152000;
 		IFFS = 288000;
 		audioFS = 48000;
+		US = 1;
+		audio_decim = 6;
 	}
-	if(mode == 2){
+	else if(mode == 2){
 		RFFS = 2400000;
 		IFFS = 240000;
 		audioFS = 44100;
+		US = 147;
+		audio_decim = 800;
 	}
-	if(mode == 3){
+	else if(mode == 3){
 		RFFS = 1920000;
-		IFFS = 320000;
+	 	IFFS = 320000;
 		audioFS = 44100;
+		US = 441;
+		audio_decim = 3200;
 	}
 
 	int rf_decim = 10;
-	int audio_decim = 5;
 	int BLOCK_SIZE =  1024 * rf_decim * 2 * audio_decim;
 	unsigned short int num_taps = 101;
 
@@ -236,9 +298,9 @@ int main(int argc, char* argv[])
 	std::condition_variable audio_cvar;
 	std::condition_variable rds_cvar;
 
-	std::thread tFrontEnd = std::thread(rfFrontEnd, std::ref(audio_mutex), std::ref(rds_mutex), std::ref(audio_cvar), std::ref(rds_cvar), std::ref(audioQueue), std::ref(rdsQueue), RFFS, IFFS, BLOCK_SIZE, rf_decim, num_taps);
-	std::thread tMonoStereo = std::thread(monoStereo, std::ref(audio_mutex), std::ref(audio_cvar), std::ref(audioQueue), RFFS, IFFS, BLOCK_SIZE, num_taps);
-	std::thread tRDS = std::thread(RDS, std::ref(rds_mutex), std::ref(rds_cvar), std::ref(rdsQueue));
+	std::thread tFrontEnd = std::thread(rfFrontEnd, std::ref(audio_mutex), std::ref(rds_mutex), std::ref(audio_cvar), std::ref(rds_cvar), std::ref(audioQueue), std::ref(rdsQueue), RFFS, IFFS, BLOCK_SIZE, rf_decim, num_taps, US, audio_decim);
+	std::thread tMonoStereo = std::thread(monoStereo, std::ref(audio_mutex), std::ref(audio_cvar), std::ref(audioQueue), RFFS, IFFS, BLOCK_SIZE, num_taps, US, audio_decim);
+	std::thread tRDS = std::thread(RDS, std::ref(rds_mutex), std::ref(rds_cvar), std::ref(rdsQueue), RFFS, IFFS, BLOCK_SIZE, num_taps, US, audio_decim);
 
 	tFrontEnd.join();
 	tMonoStereo.join();
