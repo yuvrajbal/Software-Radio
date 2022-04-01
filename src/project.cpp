@@ -143,18 +143,12 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 	std::vector<float> ncoOut;
 	float freq = 19000;
 	std::vector<float> mixer;
-	mixer.clear(); mixer.resize(hChannel.size());
 	std::vector<float> stereo_data;
 	std::vector<float> left_stereo;
 	std::vector<float> right_stereo;
-	left_stereo.clear(); left_stereo.resize(stereo_data.size());
-	right_stereo.clear(); right_stereo.resize(stereo_data.size());
 	impulseResponseLPFUS(IFFS, 16000, num_taps, h2,US);
-	
-	for(int i = 0;i<h2.size();i++){
-		h2[i] = h2[i]*US;
-	}
-	
+	std::vector<short int> mono_output;
+
 	while(true){
 
 		//Read from queue first
@@ -174,6 +168,14 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 		//Critical section ends
 		//Process data after
 
+		mixer.clear(); mixer.resize(hChannel.size());
+		left_stereo.clear(); left_stereo.resize(stereo_data.size());
+		right_stereo.clear(); right_stereo.resize(stereo_data.size());
+		
+		for(int i = 0;i<h2.size();i++){
+			h2[i] = h2[i]*US;
+		}
+		
 		mono_data.clear();mono_data.resize(demod_us.size()/audio_decim,0.0);
 		mono_data.resize((fm_demod.size()*US)/audio_decim,0.0);
  		resampler(mono_data, fm_demod, h2, state, audio_decim, US);
@@ -196,7 +198,6 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 			mixer[k] = hChannel[k]*ncoOut[k];
 		}
 
-		std::vector<short int> mono_output;
 		mono_output.clear();mono_output.resize(mono_data.size());
 		for(unsigned int k = 0;k<mono_data.size();k++){
 			if(std::isnan(mono_data[k])) mono_output[k] = 0;
@@ -284,7 +285,7 @@ int main(int argc, char* argv[])
 		audio_decim = 3200;
 	}
 
-	int rf_decim = 10;
+	int rf_decim = RFFS/IFFS;
 	int BLOCK_SIZE =  1024 * rf_decim * 2 * audio_decim;
 	unsigned short int num_taps = 101;
 
