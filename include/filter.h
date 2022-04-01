@@ -23,7 +23,7 @@ void blockProcess(std::vector<float> &, const std::vector<float> &, const std::v
 void split_audio_into_channels(const std::vector<float> &, std::vector<float> &, std::vector<float> &);
 void demod(std::vector<float> &,const std::vector<float> &,const std::vector<float> &,std::vector<float> &);
 void upsample(std::vector<float> &, const std::vector<float> &, const int );
-void Usconv_ds(std::vector<float> &, const std::vector<float> &, const std::vector<float> &, std::vector<float> &, const int , const int);
+void resampler(std::vector<float> &, const std::vector<float> &, const std::vector<float> &, std::vector<float> &, const int , const int);
 void fmPll(std::vector<float> &, std::vector<float> ,float , float ,const float , const float , const float , std::vector<float> &);
 
 

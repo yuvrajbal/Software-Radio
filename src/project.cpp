@@ -174,11 +174,9 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 		//Critical section ends
 		//Process data after
 
-		upsample(demod_us,fm_demod,US);
-
 		mono_data.clear();mono_data.resize(demod_us.size()/audio_decim,0.0);
 		mono_data.resize((fm_demod.size()*US)/audio_decim,0.0);
-		convolveFIRinBlocks(mono_data,demod_us,h2,state,demod_us.size(),audio_decim);
+ 		resampler(mono_data, fm_demod, h2, state, audio_decim, US);
 
 		// STEREO
 		impulseResponseBPF(hCarrier,FbCarrier,FeCarrier,Fs,num_taps);

@@ -110,6 +110,28 @@ void upsample(std::vector<float> &y_us, const std::vector<float> &fm_demod, cons
 	}
 }
 
+void resampler(std::vector<float> &y, const std::vector<float> &fm_demod, const std::vector<float> &h, std::vector<float> &state, const int DS, const int US)
+{
+	y.clear(); y.resize((fm_demod.size()*US/DS), 0.0);
+
+	int phase;
+
+	for (int n = 0; n < fm_demod.size()*US/DS; n++){
+		phase = (n*DS)%US;
+		for (int k = phase; k < h.size(); k+=US) {
+			if ((n*DS-k)/US >= 0) {
+				y[n] += h[k]*fm_demod[(n*DS-k)/US];
+			}
+			else{
+				y[n] += h[k]*state[state.size()+((n*DS-k)/US)];
+			}
+		}
+	}
+
+	state = slice(fm_demod,fm_demod.size()-(h.size()/US)+1, fm_demod.size()-1);
+
+}
+
 void convolveFIRinBlocks(std::vector<float> &y_ds, const std::vector<float> &xblock, const std::vector<float> &h, std::vector<float> &state, float blockSize, const int rf_decim)
 {
 	y_ds.clear(); y_ds.resize((xblock.size())/rf_decim, 0.0);
