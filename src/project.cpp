@@ -31,25 +31,25 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 	float Fc = 100000;	//RF cutoff 100Khz
 
 	std::vector<float> i_state;
+	i_state.clear();i_state.resize(num_taps-1,0.0);
 	std::vector<float> q_state;
+	q_state.clear();q_state.resize(num_taps-1,0.0);
 	std::vector<float> fm_demod;
 
 	std::vector<float> h;
 	impulseResponseLPF(RFFS, Fc, num_taps, h);
 
 	std::vector<float> I_block;
+	I_block.clear();I_block.resize(BLOCK_SIZE/2,0.0);
 	std::vector<float> Q_block;
+	Q_block.clear();Q_block.resize(BLOCK_SIZE/2,0.0);
 	std::vector<float> prev_state;
+	prev_state.clear();prev_state.resize(2,0.0);
 	std::vector<float> block_data(BLOCK_SIZE);
 	std::vector<float> I;
+	I.clear();I.resize(I_block.size()/rf_decim,0.0);
 	std::vector<float> Q;
 	Q.clear();Q.resize(Q_block.size()/rf_decim,0.0);
-	I.clear();I.resize(I_block.size()/rf_decim,0.0);
-	prev_state.clear();prev_state.resize(2,0.0);
-	Q_block.clear();Q_block.resize(BLOCK_SIZE/2,0.0);
-	I_block.clear();I_block.resize(BLOCK_SIZE/2,0.0);
-	q_state.clear();q_state.resize(num_taps-1,0.0);
-	i_state.clear();i_state.resize(num_taps-1,0.0);
 
 	// Repeated read from stdin and writing to Queues
 
@@ -116,6 +116,7 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 
 	int mono0Decim = 5;
 	std::vector<float> state;
+	state.clear();state.resize(num_taps-1,0.0);
 
 	std::vector<float> h2;
 	std::vector<float> audio;
@@ -142,22 +143,20 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 	std::vector<float> ncoOut;
 	float freq = 19000;
 	std::vector<float> mixer;
+	mixer.clear(); mixer.resize(hChannel.size());
 	std::vector<float> stereo_data;
 	std::vector<float> left_stereo;
 	std::vector<float> right_stereo;
+	left_stereo.clear(); left_stereo.resize(stereo_data.size());
+	right_stereo.clear(); right_stereo.resize(stereo_data.size());
 	impulseResponseLPFUS(IFFS, 16000, num_taps, h2,US);
 	
 	for(int i = 0;i<h2.size();i++){
 		h2[i] = h2[i]*US;
 	}
-	state.clear();state.resize(num_taps-1,0.0);
 	
 	while(true){
 
-		mixer.clear(); mixer.resize(hChannel.size());
-		left_stereo.clear(); left_stereo.resize(stereo_data.size());
-		right_stereo.clear(); right_stereo.resize(stereo_data.size());
-		
 		//Read from queue first
 		//Critical section
 		std::unique_lock<std::mutex> audio_lock(audio_mutex);
@@ -178,8 +177,7 @@ void monoStereo(std::mutex &audio_mutex, std::condition_variable &audio_cvar, st
 		mono_data.clear();mono_data.resize(demod_us.size()/audio_decim,0.0);
 		mono_data.resize((fm_demod.size()*US)/audio_decim,0.0);
  		resampler(mono_data, fm_demod, h2, state, audio_decim, US);
- 		//convolveFIRinBlocks(mono_data,demod_us,h2,state,demod_us.size(),audio_decim);
-		
+
 		// STEREO
 		impulseResponseBPF(hCarrier,FbCarrier,FeCarrier,Fs,num_taps);
 
