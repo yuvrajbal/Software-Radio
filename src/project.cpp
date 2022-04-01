@@ -40,9 +40,7 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 	impulseResponseLPF(RFFS, Fc, num_taps, h);
 
 	std::vector<float> I_block;
-	I_block.clear();I_block.resize(BLOCK_SIZE/2,0.0);
 	std::vector<float> Q_block;
-	Q_block.clear();Q_block.resize(BLOCK_SIZE/2,0.0);
 	std::vector<float> prev_state;
 	prev_state.clear();prev_state.resize(2,0.0);
 	std::vector<float> block_data(BLOCK_SIZE);
@@ -65,6 +63,8 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 		//std::cerr << "Read block " << block_id << "\n";
 
 		// Demodulate
+		I_block.clear();I_block.resize(BLOCK_SIZE/2,0.0);
+		Q_block.clear();Q_block.resize(BLOCK_SIZE/2,0.0);
 
 		// Splits the data into I and Q samples
 		for(int k = 0;k<BLOCK_SIZE/2;k++){
@@ -73,9 +73,9 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 		}
 
 
-		convolveFIRinBlocks(I, I_block, h, i_state, BLOCK_SIZE/2, rf_decim);
+		convolveFIRinBlocks(I, I_block, h, i_state, I_block.size(), rf_decim);
 
-		convolveFIRinBlocks(Q, Q_block, h, q_state, BLOCK_SIZE/2, rf_decim);
+		convolveFIRinBlocks(Q, Q_block, h, q_state, Q_block.size(), rf_decim);
 
 		fm_demod.clear();fm_demod.resize(I.size(),0.0);
 
