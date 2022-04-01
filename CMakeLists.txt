@@ -14,7 +14,6 @@ include_directories( ./include)
 file(GLOB SOURCES "src/*.c*" "test/*.c*")
 
 set(PROJECT_SOURCES ${SOURCES})
-set(PROJECT_LINK_LIBS pthread)
 list(FILTER PROJECT_SOURCES EXCLUDE REGEX ".*[Tt]est\\.c.*$")
 add_executable(project ${PROJECT_SOURCES})
 target_link_libraries(project ${PROJECT_LINK_LIBS})
