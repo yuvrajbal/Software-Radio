@@ -39,25 +39,28 @@ void estimatePSD(const std::vector<float> &samples, float &Fs, std::vector<float
 
 	float df = Fs/NFFT;
 
-	freq.resize(NFFT/2);
+	freq.resize((Fs/2)/df);
 
 	// std::cout << df << " " << freq.size() << "\n";
 
 	//exit(1);
-
-	for (unsigned int i = 0; i < freq.size(); i++){
-		freq[i] = i * df;
+	// 0 10 2
+	int count = 0;
+	for (unsigned int i = 0; i < Fs/2; i++){
+		if(i % (int)df == 0){
+			freq[count] = i;
+			count++;
+		}
 	}
 
 	std::vector<float> hann;
-
 	hann.resize(NFFT);
 
 	for(unsigned int i = 0; i < hann.size(); i++){
 		hann[i] = pow(sin(i * PI / NFFT),2);
 	}
 
-	unsigned int no_segments =  floor(samples.size() / NFFT);
+	unsigned int no_segments =  int(floor(samples.size() /float(NFFT)));
 
 	std::vector<float> psd_list;
 	psd_list.resize(no_segments * NFFT / 2);
@@ -251,4 +254,3 @@ void FFT_optimized(const std::vector<std::complex<float>> &x, \
     step_size *= 2;
   }
 }
-

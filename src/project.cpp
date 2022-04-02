@@ -43,15 +43,18 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 	I_block.clear();I_block.resize(BLOCK_SIZE/2,0.0);
 	std::vector<float> Q_block;
 	Q_block.clear();Q_block.resize(BLOCK_SIZE/2,0.0);
+
 	std::vector<float> prev_state;
 	prev_state.clear();prev_state.resize(2,0.0);
 	std::vector<float> block_data(BLOCK_SIZE);
+
 	std::vector<float> I;
 	I.clear();I.resize(I_block.size()/rf_decim,0.0);
+
 	std::vector<float> Q;
 	Q.clear();Q.resize(Q_block.size()/rf_decim,0.0);
 
-	// Repeated read from stdin and writing to Queues
+  // Repeated read from stdin and writing to Queues
 
 	for(unsigned int block_id = 0; ; block_id++){
 
@@ -72,7 +75,6 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 			Q_block[k] = block_data[1+k*2];
 		}
 
-
 		convolveFIRinBlocks(I, I_block, h, i_state, BLOCK_SIZE/2, rf_decim);
 
 		convolveFIRinBlocks(Q, Q_block, h, q_state, BLOCK_SIZE/2, rf_decim);
@@ -81,11 +83,7 @@ void rfFrontEnd(std::mutex &audio_mutex, std::mutex &rds_mutex, std::condition_v
 
 		demod(fm_demod,I,Q,prev_state);
  
-		//Figure out what goes where
-
 		//Critical section
-
-		//RDS CURRENTLY COMMENTED OUT
 
 		std::unique_lock<std::mutex> audio_lock(audio_mutex);
 		std::unique_lock<std::mutex> rds_lock(rds_mutex);
@@ -283,7 +281,6 @@ int main(int argc, char* argv[])
 		US = 441;
 		audio_decim = 3200;
 	}
-
 	int rf_decim = RFFS/IFFS;
 	int BLOCK_SIZE =  1024 * rf_decim * 2 * audio_decim;
 	unsigned short int num_taps = 101;
