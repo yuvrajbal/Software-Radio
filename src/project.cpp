@@ -282,7 +282,7 @@ int main(int argc, char* argv[])
 		audio_decim = 3200;
 	}
 	int rf_decim = RFFS/IFFS;
-	int BLOCK_SIZE =  1024 * rf_decim * 2 * audio_decim;
+	int BLOCK_SIZE =  1024 * rf_decim * 2 * 5;
 	unsigned short int num_taps = 101;
 
 	//Suggested to use 2 separate queues for separate threads
